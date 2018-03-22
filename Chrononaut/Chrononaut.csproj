@@ -54,6 +54,7 @@
     <Compile Include="Chrononaut.cs" />
     <Compile Include="ChronoReader.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="UrlBuilder.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

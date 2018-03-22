@@ -18,142 +18,169 @@ namespace Chrononaut
     using System.IO;
     using UnityEngine;
     using UnityEngine.Rendering;
+    using static GameDatabase;
 
     [KSPAddon(KSPAddon.Startup.FlightAndEditor, false /*once*/)]
-    public class TextureReloader : MonoBehaviour
+    public class Chrononaut : MonoBehaviour
     {
+        public int version = 1;
+
         /*
-        public static GameObject Read(UrlDir.UrlFile file)
+        private UrlDir.UrlFile GetFile(string model_name)
         {
-            BinaryReader binaryReader = new BinaryReader(File.Open(file.fullPath, FileMode.Open));
-            if (binaryReader == null)
+            List<UrlDir.UrlFile> models = GameDatabase.Instance.databaseModelFiles;
+            foreach (UrlDir.UrlFile model in models)
             {
-                Debug.Log("File error");
-                return null;
+                if(model.name = )
+                Debug.Log("model: " + model.name + ", " + model.fullPath);
             }
-            //List<MaterialDummy> matDummies = new List<MaterialDummy>();
-            //ChronoReader.boneDummies = new List<BonesDummy>();
-            //ChronoReader.textureDummies = new TextureDummyList();
-            FileType fileType = (FileType)binaryReader.ReadInt32();
-            int fileVersion = binaryReader.ReadInt32();
-            string str = binaryReader.ReadString();
-            str += string.Empty;
-            if (fileType != FileType.ModelBinary)
-            {
-                Debug.LogWarning("File '" + file.fullPath + "' is an incorrect type.");
-                binaryReader.Close();
-                return null;
-            }
-            GameObject gameObject = null;
-            try
-            {
-                gameObject = ChronoReader.ReadChild(binaryReader, null);
-                if (ChronoReader.boneDummies != null && ChronoReader.boneDummies.Count > 0)
-                {
-                    int i = 0;
-                    for (int count = ChronoReader.boneDummies.Count; i < count; i++)
-                    {
-                        Transform[] array = new Transform[ChronoReader.boneDummies[i].bones.Count];
-                        int j = 0;
-                        for (int count2 = ChronoReader.boneDummies[i].bones.Count; j < count2; j++)
-                        {
-                            array[j] = ChronoReader.FindChildByName(gameObject.transform, ChronoReader.boneDummies[i].bones[j]);
-                        }
-                        ChronoReader.boneDummies[i].smr.bones = array;
-                    }
-                }
-                if (ChronoReader.shaderFallback)
-                {
-                    Renderer[] componentsInChildren = gameObject.GetComponentsInChildren<Renderer>();
-                    int k = 0;
-                    for (int num = componentsInChildren.Length; k < num; k++)
-                    {
-                        Renderer renderer = componentsInChildren[k];
-                        int l = 0;
-                        for (int num2 = renderer.sharedMaterials.Length; l < num2; l++)
-                        {
-                            Material material = renderer.sharedMaterials[l];
-                            material.shader = Shader.Find("KSP/Diffuse");
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError("File error:\n" + ex.Message + "\n" + ex.StackTrace);
-            }
-            ChronoReader.boneDummies = null;
-            ChronoReader.matDummies = null;
-            ChronoReader.textureDummies = null;
-            binaryReader.Close();
-            return gameObject;
         }
         */
+
+        private AvailablePart GetAvailablePart(string partName)
+        {
+            Debug.Log("partName: " + partName);
+            // Make sure to throw away any extra text thrown in at the end of the string
+            partName = partName.Split(' ')[0];
+            Debug.Log("partName: " + partName);
+
+            List< AvailablePart> availableParts = PartLoader.LoadedPartsList;
+            foreach (AvailablePart availablePart in availableParts)
+                if (partName == availablePart.name)
+                    return availablePart;
+
+            return null;
+        }
+
+        string GetModelFileName_FromTransform(Part part)
+        {
+            // Get the transform of the part
+            Transform tPart = part.transform;
+
+            // Get the "model" transform that each part has
+            Transform tModel = tPart.Find("model");
+
+            // Get the empty game object of the model
+            Transform tEmpty = tModel.GetChild(0);
+
+            // Remove the "(clone)" part
+            string modelName = tEmpty.name.Split('(')[0];
+
+            return modelName;
+        }
+
+        string GetModelFileName_FromModel(Part part)
+        {
+            AvailablePart availablePart = GetAvailablePart(part.name);
+
+            /*
+            Debug.Log("AvailPart: " + availablePart.name);
+            Debug.Log("model: " + availablePart.partConfig.GetValue("model"));
+            Debug.Log("MODEL: " + availablePart.partConfig.GetNode("MODEL").GetValue("model"));
+            */
+
+            // Check for an entry in either the PART.model property or the PART.MODEL.model value
+            string model = availablePart.partConfig.GetValue("model");
+            if(model == null)
+                model = availablePart.partConfig.GetNode("MODEL").GetValue("model");
+
+            return model;
+        }
+
+        public void PrintTextures()
+        {
+            TextureInfo textureInfo;
+            GameDatabase gdb = GameDatabase.Instance;
+            Debug.Log("count: " + gdb.databaseTexture.Count);
+            for(int i=0;i< gdb.databaseTexture.Count;i++)
+            {
+                textureInfo = gdb.databaseTexture[i];
+                Debug.Log("tex: " + textureInfo.name + ", " + textureInfo.file);
+            }
+        }
+        /*
+        public class DatabaseLoaderModel_MU : DatabaseLoader<GameObject>
+        {
+            public override IEnumerator Load(UrlDir.UrlFile urlFile, FileInfo file)
+            {
+                GameObject gameObject = PartReader.Read(urlFile);
+                if ((UnityEngine.Object)gameObject != (UnityEngine.Object)null)
+                {
+                    base.obj = gameObject;
+                    base.successful = true;
+                }
+                else
+                {
+                    Debug.LogWarning("Model load error in '" + file.FullName + "'");
+                    base.obj = null;
+                    base.successful = false;
+                }
+                yield break;
+            }
+        }
+        */
+
         public void Update()
         {
+            version = 2;
             if (Input.GetKeyDown(KeyCode.F8))
             {
-                Debug.Log("F8");
+                Debug.Log("*** Chrononaut ***");
 
-                //obj.transform = new Vector3(1, 2, 3);
-
-
-                UrlDir root = new UrlDir(new UrlDir.ConfigDirectory[0], new UrlDir.ConfigFileType[0]);
-
-                //string url = "GameData/RocketEmporium/Parts/Resources/Coupling/decoupler_interstage_base_0_625";
-                /*
-                GameDatabase gdb = GameDatabase.Instance;
-                int num = 0;
-                GameObject obj = null;
-                while (num < gdb.databaseModel.Count)
-                {
-                    obj = gdb.databaseModel[num];
-                    FileInfo file = new FileInfo("GameData/" + obj.name + ".mu");
-                    Debug.Log("prefab: " + file.FullName);
-                    UrlDir.UrlFile urlFile = new UrlDir.UrlFile(root, file);
-                    ChronoReader.Read(obj, urlFile);
-                    num++;
-                }
-
-                */
-
-                Debug.Log("FileInfo");
-                FileInfo file = new FileInfo("GameData/RocketEmporium/Parts/Coupling/decoupler_interstage_base_0_625.mu");
-                Debug.Log("FileInfo: " + file);
-                Debug.Log("UrlFile");
-                UrlDir.UrlFile urlFile = new UrlDir.UrlFile(root, file);
-                Debug.Log("UrlFile:" + urlFile);
-                Debug.Log("Read");
-                GameObject obj = ChronoReader.Read(urlFile);
-
-                Debug.Log("obj: " + obj);
-                Debug.Log("obj.name: " + obj.name);
+                PrintTextures();
 
                 Vessel vessel = FlightGlobals.ActiveVessel;
                 Debug.Log("Name: " + vessel.name);
                 List<Part> parts = vessel.parts;
                 Debug.Log("Parts: " + parts.Count);
 
-                MeshFilter[] meshFiltersSource = obj.GetComponentsInChildren<MeshFilter>();
-
-                Debug.Log("  Mesh filter name: " + meshFiltersSource[0].name);
-                Mesh mesh = meshFiltersSource[0].mesh;
-                Debug.Log("  Mesh name: " + mesh.name);
-
-                /*
-                List<AvailablePart> availableParts = ChronoReader.LoadedPartsList;
-
-                foreach (AvailablePart availablePart in availableParts)
-                {
-                    Debug.Log("availablePart: " + availablePart.name);
-                }
-                */
-                Destroy(obj);
                 foreach (Part part in parts)
                 {
                     Debug.Log("Part: " + part.name);
 
+                    //part.transform
+
+                    string nameT = GetModelFileName_FromTransform(part);
+                    string nameM = GetModelFileName_FromModel(part);
+
+                    Debug.Log("nameT: " + nameT);
+                    Debug.Log("nameM: " + nameM);
+
+                    string fileName = "GameData/" + nameT + ".mu";
+                    string directory = Path.GetDirectoryName(nameT);
+                    FileInfo file = new FileInfo(fileName);
+
+                    UrlDir root = UrlBuilder.CreateDir(directory);
+                    UrlDir.UrlFile urlFile = new UrlDir.UrlFile(root, file);
+
+                    /*
+                    Texture2D texture;
+                    texture = GameDatabase.Instance.GetTexture(
+                        "RocketEmporium/Parts/Coupling/fairing",
+                        false);
+                    Debug.Log("tex1: " + texture);
+                    */
+
+                    /*
+                    DatabaseLoader<GameObject> databaseLoader = new DatabaseLoader<GameObject>();
+                    DatabaseLoaderModel_MU databaseLoader = new DatabaseLoaderModel_MU();
+                    databaseLoader.Load(urlFile, file);
+                    Debug.Log("success: " + (databaseLoader.successful ? "yes" : "no"));
+                    GameObject obj = databaseLoader.obj;
+                    */
+
+                    GameObject obj = ChronoReader.Read(urlFile);
+
+                    // Destroy the object directly so it doesn't stay visible in the scene.
+                    // Seems it is still accessible tho and can be read
+                    Destroy(obj);
+
+                    Debug.Log("obj: " + obj);
+                    Debug.Log("obj.name: " + obj.name);
+                    MeshFilter[] meshFiltersSource = obj.GetComponentsInChildren<MeshFilter>();
+                    
                     List<MeshFilter> meshFiltersDest = part.FindModelComponents<MeshFilter>();
+
                     Debug.Log("part.transform: ", part.transform);
                     Debug.Log("obj.transform: ", obj.transform);
 
@@ -166,17 +193,8 @@ namespace Chrononaut
                         MeshFilter meshFilter = meshFiltersSource[i++];
                         Mesh meshSource = meshFilter.mesh;
                         Debug.Log(" source: " + meshFilter.name);
-                        Debug.Log(" source: " + meshSource.name);
-
-
                         Debug.Log(" dest was: " + meshFilterDest.name);
-                        Debug.Log(" dest was: " + meshFilterDest.sharedMesh.name);
-                        Debug.Log(" dest was: " + meshFilterDest.mesh.name);
-                         
 
-                        // List<MeshFilter> mesh_filters = obj.getcom <MeshFilter>();
-                        //Debug.Log("  Mesh count: " + mesh.vertexCount);
-                        // meshFilterDest.sharedMesh = meshSource;
                         Destroy(meshFilterDest.mesh);
                         meshFilterDest.mesh = meshSource;
                         /*
@@ -190,7 +208,7 @@ namespace Chrononaut
                                 renderer.enabled = true;
                         }
                         */
-                        Debug.Log(" src transform: " + meshFilter.transform.localScale);
+                    Debug.Log(" src transform: " + meshFilter.transform.localScale);
                         Debug.Log(" dest transform: " + meshFilterDest.transform.localScale);
                         Debug.Log(" src parent: " + meshFilter.transform.parent);
                         Debug.Log(" dest parent: " + meshFilterDest.transform.parent);
@@ -198,10 +216,6 @@ namespace Chrononaut
                         meshFilterDest.transform.localScale = meshFilter.transform.localScale;
                         meshFilterDest.transform.localRotation = meshFilter.transform.localRotation;
                         meshFilterDest.transform.localPosition = meshFilter.transform.localPosition;
-
-                        // meshFilterDest.transform = ;
-                        Debug.Log(" dest is: " + meshFilterDest.sharedMesh.name);
-                        //mesh_filter = mesh;
                     }
                     return;
                 }
@@ -246,8 +260,5 @@ namespace Chrononaut
             */
 
     }
-
-
-
 
 }
