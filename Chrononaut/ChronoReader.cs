@@ -1,161 +1,19 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.IO;
-
-using UnityEngine;
 using PartToolsLib;
-
-// Update a part by reading the model mesh in run-time
+using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace Chrononaut
 {
-    // ChronoReader
-    using PartToolsLib;
-    using System;
-    using System.Collections;
-    using System.Collections.Generic;
-    using System.IO;
-    using UnityEngine;
-    using UnityEngine.Rendering;
-
-    class ChronoReader
+    // Token: 0x02000963 RID: 2403
+    public class ChronoReader
     {
-        public enum ShaderPropertyType
-        {
-            Color,
-            Vector,
-            Float,
-            Range,
-            TexEnv
-        }
-
-        private class MaterialDummy
-        {
-            public List<Renderer> renderers;
-
-            public List<KSPParticleEmitter> particleEmitters;
-
-            public MaterialDummy()
-            {
-                this.renderers = new List<Renderer>();
-                this.particleEmitters = new List<KSPParticleEmitter>();
-            }
-        }
-
-        private class BonesDummy
-        {
-            public SkinnedMeshRenderer smr;
-
-            public List<string> bones;
-
-            public BonesDummy()
-            {
-                this.bones = new List<string>();
-            }
-        }
-
-        private class TextureMaterialDummy
-        {
-            public Material material;
-
-            public List<string> shaderName;
-
-            public TextureMaterialDummy(Material material)
-            {
-                this.material = material;
-                this.shaderName = new List<string>();
-            }
-        }
-
-        private class TextureDummy : List<TextureMaterialDummy>
-        {
-            public bool Contains(Material material)
-            {
-                int num = base.Count;
-                do
-                {
-                    if (num-- <= 0)
-                    {
-                        return false;
-                    }
-                }
-                while (!((UnityEngine.Object)base[num].material == (UnityEngine.Object)material));
-                return true;
-            }
-
-            public TextureMaterialDummy Get(Material material)
-            {
-                int num = 0;
-                int count = base.Count;
-                while (true)
-                {
-                    if (num < count)
-                    {
-                        if ((UnityEngine.Object)base[num].material == (UnityEngine.Object)material)
-                        {
-                            break;
-                        }
-                        num++;
-                        continue;
-                    }
-                    return null;
-                }
-                return base[num];
-            }
-
-            public void AddMaterialDummy(Material material, string shaderName)
-            {
-                TextureMaterialDummy textureMaterialDummy = this.Get(material);
-                if (textureMaterialDummy == null)
-                {
-                    base.Add(textureMaterialDummy = new TextureMaterialDummy(material));
-                }
-                if (!textureMaterialDummy.shaderName.Contains(shaderName))
-                {
-                    textureMaterialDummy.shaderName.Add(shaderName);
-                }
-            }
-        }
-
-        private class TextureDummyList : List<TextureDummy>
-        {
-            public void AddTextureDummy(int textureID, Material material, string shaderName)
-            {
-                if (textureID != -1)
-                {
-                    while (textureID >= base.Count)
-                    {
-                        base.Add(new TextureDummy());
-                    }
-                    base[textureID].AddMaterialDummy(material, shaderName);
-                }
-            }
-        }
-
-        private static int fileVersion;
-
-        private static UrlDir.UrlFile file;
-
-        private static List<MaterialDummy> matDummies;
-
-        private static List<BonesDummy> boneDummies;
-
-        private static TextureDummyList textureDummies;
-
-        private static Shader shaderUnlit;
-
-        private static Shader shaderDiffuse;
-
-        private static Shader shaderSpecular;
-
-        public static bool shaderFallback;
-
+        // Token: 0x06004AE1 RID: 19169 RVA: 0x001E1FA4 File Offset: 0x001E01A4
         public static GameObject Read(UrlDir.UrlFile file)
         {
-            //GameObject gameObject = new GameObject();
-            GameObject gameObject = null;
             ChronoReader.file = file;
             BinaryReader binaryReader = new BinaryReader(File.Open(file.fullPath, FileMode.Open));
             if (binaryReader == null)
@@ -163,51 +21,58 @@ namespace Chrononaut
                 Debug.Log("File error");
                 return null;
             }
-            ChronoReader.matDummies = new List<MaterialDummy>();
-            ChronoReader.boneDummies = new List<BonesDummy>();
-            ChronoReader.textureDummies = new TextureDummyList();
+            ChronoReader.matDummies = new List<ChronoReader.MaterialDummy>();
+            ChronoReader.boneDummies = new List<ChronoReader.BonesDummy>();
+            ChronoReader.textureDummies = new ChronoReader.TextureDummyList();
             FileType fileType = (FileType)binaryReader.ReadInt32();
             ChronoReader.fileVersion = binaryReader.ReadInt32();
             string str = binaryReader.ReadString();
             str += string.Empty;
-
             if (fileType != FileType.ModelBinary)
             {
                 Debug.LogWarning("File '" + file.fullPath + "' is an incorrect type.");
                 binaryReader.Close();
                 return null;
             }
+            GameObject gameObject = null;
             try
             {
                 gameObject = ChronoReader.ReadChild(binaryReader, null);
                 if (ChronoReader.boneDummies != null && ChronoReader.boneDummies.Count > 0)
                 {
                     int i = 0;
-                    for (int count = ChronoReader.boneDummies.Count; i < count; i++)
+                    int count = ChronoReader.boneDummies.Count;
+                    while (i < count)
                     {
                         Transform[] array = new Transform[ChronoReader.boneDummies[i].bones.Count];
                         int j = 0;
-                        for (int count2 = ChronoReader.boneDummies[i].bones.Count; j < count2; j++)
+                        int count2 = ChronoReader.boneDummies[i].bones.Count;
+                        while (j < count2)
                         {
                             array[j] = ChronoReader.FindChildByName(gameObject.transform, ChronoReader.boneDummies[i].bones[j]);
+                            j++;
                         }
                         ChronoReader.boneDummies[i].smr.bones = array;
+                        i++;
                     }
                 }
                 if (ChronoReader.shaderFallback)
                 {
                     Renderer[] componentsInChildren = gameObject.GetComponentsInChildren<Renderer>();
                     int k = 0;
-                    for (int num = componentsInChildren.Length; k < num; k++)
+                    int num = componentsInChildren.Length;
+                    while (k < num)
                     {
                         Renderer renderer = componentsInChildren[k];
                         int l = 0;
-                        for (int num2 = renderer.sharedMaterials.Length; l < num2; l++)
+                        int num2 = renderer.sharedMaterials.Length;
+                        while (l < num2)
                         {
                             Material material = renderer.sharedMaterials[l];
                             material.shader = Shader.Find("KSP/Diffuse");
-                            //renderer.enabled = false;
+                            l++;
                         }
+                        k++;
                     }
                 }
             }
@@ -222,6 +87,7 @@ namespace Chrononaut
             return gameObject;
         }
 
+        // Token: 0x06004AE2 RID: 19170 RVA: 0x001E21D8 File Offset: 0x001E03D8
         private static GameObject ReadChild(BinaryReader br, Transform parent)
         {
             GameObject gameObject = new GameObject(br.ReadString());
@@ -236,6 +102,8 @@ namespace Chrononaut
                     case 0:
                         ChronoReader.ReadChild(br, gameObject.transform);
                         break;
+                    case 1:
+                        return gameObject;
                     case 2:
                         if (ChronoReader.fileVersion >= 3)
                         {
@@ -248,39 +116,35 @@ namespace Chrononaut
                         break;
                     case 3:
                         {
-                            MeshCollider meshCollider2 = gameObject.AddComponent<MeshCollider>();
-                            meshCollider2.convex = br.ReadBoolean();
-                            if (!meshCollider2.convex)
+                            MeshCollider meshCollider = gameObject.AddComponent<MeshCollider>();
+                            meshCollider.convex = br.ReadBoolean();
+                            if (!meshCollider.convex)
                             {
-                                meshCollider2.convex = true;
+                                meshCollider.convex = true;
                             }
-                            meshCollider2.sharedMesh = ChronoReader.ReadMesh(br);
-                            //meshCollider2.enabled = false;
+                            meshCollider.sharedMesh = ChronoReader.ReadMesh(br);
                             break;
                         }
                     case 4:
                         {
-                            SphereCollider sphereCollider2 = gameObject.AddComponent<SphereCollider>();
-                            sphereCollider2.radius = br.ReadSingle();
-                            sphereCollider2.center = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-                            //sphereCollider2.enabled = false;
+                            SphereCollider sphereCollider = gameObject.AddComponent<SphereCollider>();
+                            sphereCollider.radius = br.ReadSingle();
+                            sphereCollider.center = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
                             break;
                         }
                     case 5:
                         {
-                            CapsuleCollider capsuleCollider2 = gameObject.AddComponent<CapsuleCollider>();
-                            capsuleCollider2.radius = br.ReadSingle();
-                            capsuleCollider2.direction = br.ReadInt32();
-                            capsuleCollider2.center = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-                            //capsuleCollider2.enabled = false;
+                            CapsuleCollider capsuleCollider = gameObject.AddComponent<CapsuleCollider>();
+                            capsuleCollider.radius = br.ReadSingle();
+                            capsuleCollider.direction = br.ReadInt32();
+                            capsuleCollider.center = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
                             break;
                         }
                     case 6:
                         {
-                            BoxCollider boxCollider2 = gameObject.AddComponent<BoxCollider>();
-                            boxCollider2.size = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-                            boxCollider2.center = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-                            //boxCollider2.enabled = false;
+                            BoxCollider boxCollider = gameObject.AddComponent<BoxCollider>();
+                            boxCollider.size = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
+                            boxCollider.center = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
                             break;
                         }
                     case 7:
@@ -300,18 +164,27 @@ namespace Chrononaut
                             int num = br.ReadInt32();
                             for (int i = 0; i < num; i++)
                             {
-                                Material material = null;
-                                MaterialDummy materialDummy = ChronoReader.matDummies[i];
-                                material = ((ChronoReader.fileVersion < 4) ? ChronoReader.ReadMaterial(br) : ChronoReader.ReadMaterial4(br));
-                                int num2 = materialDummy.renderers.Count;
-                                while (num2-- > 0)
+                                ChronoReader.MaterialDummy materialDummy = ChronoReader.matDummies[i];
+                                Material material;
+                                if (ChronoReader.fileVersion >= 4)
                                 {
-                                    materialDummy.renderers[num2].sharedMaterial = material;
+                                    material = ChronoReader.ReadMaterial4(br);
+                                }
+                                else
+                                {
+                                    material = ChronoReader.ReadMaterial(br);
+                                }
+                                int count = materialDummy.renderers.Count;
+                                while (count-- > 0)
+                                {
+                                    materialDummy.renderers[count].sharedMaterial = material;
                                 }
                                 int j = 0;
-                                for (int count = materialDummy.particleEmitters.Count; j < count; j++)
+                                int count2 = materialDummy.particleEmitters.Count;
+                                while (j < count2)
                                 {
                                     materialDummy.particleEmitters[j].material = material;
+                                    j++;
                                 }
                             }
                             break;
@@ -327,44 +200,41 @@ namespace Chrononaut
                         break;
                     case 25:
                         {
-                            MeshCollider meshCollider = gameObject.AddComponent<MeshCollider>();
+                            MeshCollider meshCollider2 = gameObject.AddComponent<MeshCollider>();
                             bool isTrigger = br.ReadBoolean();
-                            meshCollider.convex = br.ReadBoolean();
-                            meshCollider.isTrigger = isTrigger;
-                            if (!meshCollider.convex)
+                            meshCollider2.convex = br.ReadBoolean();
+                            meshCollider2.isTrigger = isTrigger;
+                            if (!meshCollider2.convex)
                             {
-                                meshCollider.convex = true;
+                                meshCollider2.convex = true;
                             }
-                            meshCollider.sharedMesh = ChronoReader.ReadMesh(br);
+                            meshCollider2.sharedMesh = ChronoReader.ReadMesh(br);
                             break;
                         }
                     case 26:
                         {
-                            SphereCollider sphereCollider = gameObject.AddComponent<SphereCollider>();
-                            sphereCollider.isTrigger = br.ReadBoolean();
-                            sphereCollider.radius = br.ReadSingle();
-                            sphereCollider.center = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-                            //sphereCollider.enabled = false;
+                            SphereCollider sphereCollider2 = gameObject.AddComponent<SphereCollider>();
+                            sphereCollider2.isTrigger = br.ReadBoolean();
+                            sphereCollider2.radius = br.ReadSingle();
+                            sphereCollider2.center = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
                             break;
                         }
                     case 27:
                         {
-                            CapsuleCollider capsuleCollider = gameObject.AddComponent<CapsuleCollider>();
-                            capsuleCollider.isTrigger = br.ReadBoolean();
-                            capsuleCollider.radius = br.ReadSingle();
-                            capsuleCollider.height = br.ReadSingle();
-                            capsuleCollider.direction = br.ReadInt32();
-                            capsuleCollider.center = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-                            //capsuleCollider.enabled = false;
+                            CapsuleCollider capsuleCollider2 = gameObject.AddComponent<CapsuleCollider>();
+                            capsuleCollider2.isTrigger = br.ReadBoolean();
+                            capsuleCollider2.radius = br.ReadSingle();
+                            capsuleCollider2.height = br.ReadSingle();
+                            capsuleCollider2.direction = br.ReadInt32();
+                            capsuleCollider2.center = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
                             break;
                         }
                     case 28:
                         {
-                            BoxCollider boxCollider = gameObject.AddComponent<BoxCollider>();
-                            boxCollider.isTrigger = br.ReadBoolean();
-                            boxCollider.size = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-                            boxCollider.center = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-                            //boxCollider.enabled = false;
+                            BoxCollider boxCollider2 = gameObject.AddComponent<BoxCollider>();
+                            boxCollider2.isTrigger = br.ReadBoolean();
+                            boxCollider2.size = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
+                            boxCollider2.center = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
                             break;
                         }
                     case 29:
@@ -374,26 +244,29 @@ namespace Chrononaut
                             wheelCollider.radius = br.ReadSingle();
                             wheelCollider.suspensionDistance = br.ReadSingle();
                             wheelCollider.center = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-                            JointSpring suspensionSpring = default(JointSpring);
-                            suspensionSpring.spring = br.ReadSingle();
-                            suspensionSpring.damper = br.ReadSingle();
-                            suspensionSpring.targetPosition = br.ReadSingle();
-                            wheelCollider.suspensionSpring = suspensionSpring;
-                            WheelFrictionCurve forwardFriction = default(WheelFrictionCurve);
-                            forwardFriction.extremumSlip = br.ReadSingle();
-                            forwardFriction.extremumValue = br.ReadSingle();
-                            forwardFriction.asymptoteSlip = br.ReadSingle();
-                            forwardFriction.asymptoteValue = br.ReadSingle();
-                            forwardFriction.stiffness = br.ReadSingle();
-                            wheelCollider.forwardFriction = forwardFriction;
-                            WheelFrictionCurve sidewaysFriction = default(WheelFrictionCurve);
-                            sidewaysFriction.extremumSlip = br.ReadSingle();
-                            sidewaysFriction.extremumValue = br.ReadSingle();
-                            sidewaysFriction.asymptoteSlip = br.ReadSingle();
-                            sidewaysFriction.asymptoteValue = br.ReadSingle();
-                            sidewaysFriction.stiffness = br.ReadSingle();
-                            wheelCollider.sidewaysFriction = sidewaysFriction;
-                            //wheelCollider.enabled = false;
+                            wheelCollider.suspensionSpring = new JointSpring
+                            {
+                                spring = br.ReadSingle(),
+                                damper = br.ReadSingle(),
+                                targetPosition = br.ReadSingle()
+                            };
+                            wheelCollider.forwardFriction = new WheelFrictionCurve
+                            {
+                                extremumSlip = br.ReadSingle(),
+                                extremumValue = br.ReadSingle(),
+                                asymptoteSlip = br.ReadSingle(),
+                                asymptoteValue = br.ReadSingle(),
+                                stiffness = br.ReadSingle()
+                            };
+                            wheelCollider.sidewaysFriction = new WheelFrictionCurve
+                            {
+                                extremumSlip = br.ReadSingle(),
+                                extremumValue = br.ReadSingle(),
+                                asymptoteSlip = br.ReadSingle(),
+                                asymptoteValue = br.ReadSingle(),
+                                stiffness = br.ReadSingle()
+                            };
+                            wheelCollider.enabled = false;
                             break;
                         }
                     case 30:
@@ -402,51 +275,66 @@ namespace Chrononaut
                     case 31:
                         ChronoReader.ReadParticles(br, gameObject);
                         break;
-                    case 1:
-                        return gameObject;
                 }
             }
             return gameObject;
         }
 
+        // Token: 0x06004AE3 RID: 19171 RVA: 0x001E27C8 File Offset: 0x001E09C8
         private static void ReadTextures(BinaryReader br, GameObject o)
         {
             int num = br.ReadInt32();
             if (num != ChronoReader.textureDummies.Count)
             {
-                Debug.LogError("TextureError: " + num + " " + ChronoReader.textureDummies.Count);
-            }
-            else
-            {
-                for (int i = 0; i < num; i++)
+                Debug.LogError(string.Concat(new object[]
                 {
-                    string path = br.ReadString();
-                    string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(path);
-                    TextureType textureType = (TextureType)br.ReadInt32();
-                    string url = ChronoReader.file.parent.url + "/" + fileNameWithoutExtension;
-                    Texture2D texture = GameDatabase.Instance.GetTexture(url, textureType == TextureType.NormalMap);
-                    if ((UnityEngine.Object)texture == (UnityEngine.Object)null)
+                "TextureError: ",
+                num,
+                " ",
+                ChronoReader.textureDummies.Count
+                }));
+                return;
+            }
+            for (int i = 0; i < num; i++)
+            {
+                string path = br.ReadString();
+                string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(path);
+                TextureType textureType = (TextureType)br.ReadInt32();
+                string url = ChronoReader.file.parent.url + "/" + fileNameWithoutExtension;
+                Texture2D texture = GameDatabase.Instance.GetTexture(url, textureType == TextureType.NormalMap);
+                if (texture == null)
+                {
+                    Debug.LogError(string.Concat(new string[]
                     {
-                        Debug.LogError("Texture '" + ChronoReader.file.parent.url + "/" + fileNameWithoutExtension + "' not found!");
-                    }
-                    else
+                    "Texture '",
+                    ChronoReader.file.parent.url,
+                    "/",
+                    fileNameWithoutExtension,
+                    "' not found!"
+                    }));
+                }
+                else
+                {
+                    int j = 0;
+                    int count = ChronoReader.textureDummies[i].Count;
+                    while (j < count)
                     {
-                        int j = 0;
-                        for (int count = ((List<TextureDummy>)ChronoReader.textureDummies)[i].Count; j < count; j++)
+                        ChronoReader.TextureMaterialDummy textureMaterialDummy = ChronoReader.textureDummies[i][j];
+                        int k = 0;
+                        int count2 = textureMaterialDummy.shaderName.Count;
+                        while (k < count2)
                         {
-                            TextureMaterialDummy textureMaterialDummy = ((List<TextureMaterialDummy>)((List<TextureDummy>)ChronoReader.textureDummies)[i])[j];
-                            int k = 0;
-                            for (int count2 = textureMaterialDummy.shaderName.Count; k < count2; k++)
-                            {
-                                string name = textureMaterialDummy.shaderName[k];
-                                textureMaterialDummy.material.SetTexture(name, texture);
-                            }
+                            string name = textureMaterialDummy.shaderName[k];
+                            textureMaterialDummy.material.SetTexture(name, texture);
+                            k++;
                         }
+                        j++;
                     }
                 }
             }
         }
 
+        // Token: 0x06004AE4 RID: 19172 RVA: 0x001E293C File Offset: 0x001E0B3C
         public static Texture2D NormalMapToUnityNormalMap(Texture2D tex)
         {
             int width = tex.width;
@@ -470,10 +358,10 @@ namespace Chrononaut
             return texture2D;
         }
 
+        // Token: 0x06004AE5 RID: 19173 RVA: 0x001E29FC File Offset: 0x001E0BFC
         private static void ReadMeshRenderer(BinaryReader br, GameObject o)
         {
             MeshRenderer meshRenderer = o.AddComponent<MeshRenderer>();
-            //meshRenderer.enabled = false;
             if (ChronoReader.fileVersion >= 1)
             {
                 if (br.ReadBoolean())
@@ -489,36 +377,36 @@ namespace Chrononaut
             int num = br.ReadInt32();
             for (int i = 0; i < num; i++)
             {
-                int num2 = br.ReadInt32();
-                while (num2 >= ChronoReader.matDummies.Count)
+                int j = br.ReadInt32();
+                while (j >= ChronoReader.matDummies.Count)
                 {
-                    ChronoReader.matDummies.Add(new MaterialDummy());
+                    ChronoReader.matDummies.Add(new ChronoReader.MaterialDummy());
                 }
-                ChronoReader.matDummies[num2].renderers.Add(meshRenderer);
+                ChronoReader.matDummies[j].renderers.Add(meshRenderer);
             }
         }
 
+        // Token: 0x06004AE6 RID: 19174 RVA: 0x001E2A8C File Offset: 0x001E0C8C
         private static void ReadSkinnedMeshRenderer(BinaryReader br, GameObject o)
         {
             SkinnedMeshRenderer skinnedMeshRenderer = o.AddComponent<SkinnedMeshRenderer>();
-            //skinnedMeshRenderer.enabled = false;
             int num = br.ReadInt32();
             for (int i = 0; i < num; i++)
             {
-                int num2 = br.ReadInt32();
-                while (num2 >= ChronoReader.matDummies.Count)
+                int j = br.ReadInt32();
+                while (j >= ChronoReader.matDummies.Count)
                 {
-                    ChronoReader.matDummies.Add(new MaterialDummy());
+                    ChronoReader.matDummies.Add(new ChronoReader.MaterialDummy());
                 }
-                ChronoReader.matDummies[num2].renderers.Add(skinnedMeshRenderer);
+                ChronoReader.matDummies[j].renderers.Add(skinnedMeshRenderer);
             }
             skinnedMeshRenderer.localBounds = new Bounds(new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle()), new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle()));
             skinnedMeshRenderer.quality = (SkinQuality)br.ReadInt32();
             skinnedMeshRenderer.updateWhenOffscreen = br.ReadBoolean();
-            int num3 = br.ReadInt32();
-            BonesDummy bonesDummy = new BonesDummy();
+            int num2 = br.ReadInt32();
+            ChronoReader.BonesDummy bonesDummy = new ChronoReader.BonesDummy();
             bonesDummy.smr = skinnedMeshRenderer;
-            for (int j = 0; j < num3; j++)
+            for (int k = 0; k < num2; k++)
             {
                 bonesDummy.bones.Add(br.ReadString());
             }
@@ -526,6 +414,7 @@ namespace Chrononaut
             skinnedMeshRenderer.sharedMesh = ChronoReader.ReadMesh(br);
         }
 
+        // Token: 0x06004AE7 RID: 19175 RVA: 0x001E2B94 File Offset: 0x001E0D94
         private static Mesh ReadMesh(BinaryReader br)
         {
             Mesh mesh = new Mesh();
@@ -537,168 +426,175 @@ namespace Chrononaut
             }
             int num = br.ReadInt32();
             int num2 = br.ReadInt32();
-            Vector3[] array = null;
-            Vector3[] array2 = null;
-            Vector2[] array3 = null;
-            Vector2[] array4 = null;
-            Vector4[] array5 = null;
-            BoneWeight[] array6 = null;
-            Color32[] array7 = null;
-            int[] array8 = null;
             int num3 = 0;
             while ((entryType = (EntryType)br.ReadInt32()) != EntryType.MeshEnd)
             {
                 switch (entryType)
                 {
-                    case EntryType.MeshVertexColors:
-                        array7 = new Color32[num];
-                        for (int k = 0; k < num; k++)
-                        {
-                            array7[k] = new Color32(br.ReadByte(), br.ReadByte(), br.ReadByte(), br.ReadByte());
-                        }
-                        mesh.colors32 = array7;
-                        break;
                     case EntryType.MeshVerts:
-                        array = new Vector3[num];
-                        for (int num7 = 0; num7 < num; num7++)
                         {
-                            array[num7] = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
+                            Vector3[] array = new Vector3[num];
+                            for (int i = 0; i < num; i++)
+                            {
+                                array[i] = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
+                            }
+                            mesh.vertices = array;
+                            break;
                         }
-                        mesh.vertices = array;
-                        break;
                     case EntryType.MeshUV:
-                        array3 = new Vector2[num];
-                        for (int j = 0; j < num; j++)
                         {
-                            array3[j] = new Vector2(br.ReadSingle(), br.ReadSingle());
+                            Vector2[] array2 = new Vector2[num];
+                            for (int j = 0; j < num; j++)
+                            {
+                                array2[j] = new Vector2(br.ReadSingle(), br.ReadSingle());
+                            }
+                            mesh.uv = array2;
+                            break;
                         }
-                        mesh.uv = array3;
-                        break;
                     case EntryType.MeshUV2:
-                        array4 = new Vector2[num];
-                        for (int n = 0; n < num; n++)
                         {
-                            array4[n] = new Vector2(br.ReadSingle(), br.ReadSingle());
+                            Vector2[] array3 = new Vector2[num];
+                            for (int k = 0; k < num; k++)
+                            {
+                                array3[k] = new Vector2(br.ReadSingle(), br.ReadSingle());
+                            }
+                            mesh.uv2 = array3;
+                            break;
                         }
-                        mesh.uv2 = array4;
-                        break;
                     case EntryType.MeshNormals:
-                        array2 = new Vector3[num];
-                        for (int num8 = 0; num8 < num; num8++)
                         {
-                            array2[num8] = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
+                            Vector3[] array4 = new Vector3[num];
+                            for (int l = 0; l < num; l++)
+                            {
+                                array4[l] = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
+                            }
+                            mesh.normals = array4;
+                            break;
                         }
-                        mesh.normals = array2;
-                        break;
                     case EntryType.MeshTangents:
-                        array5 = new Vector4[num];
-                        for (int m = 0; m < num; m++)
                         {
-                            array5[m] = new Vector4(br.ReadSingle(), br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
+                            Vector4[] array5 = new Vector4[num];
+                            for (int m = 0; m < num; m++)
+                            {
+                                array5[m] = new Vector4(br.ReadSingle(), br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
+                            }
+                            mesh.tangents = array5;
+                            break;
                         }
-                        mesh.tangents = array5;
-                        break;
                     case EntryType.MeshTriangles:
                         {
-                            int num5 = br.ReadInt32();
-                            array8 = new int[num5];
-                            for (int num6 = 0; num6 < num5; num6++)
+                            int num4 = br.ReadInt32();
+                            int[] array6 = new int[num4];
+                            for (int n = 0; n < num4; n++)
                             {
-                                array8[num6] = br.ReadInt32();
+                                array6[n] = br.ReadInt32();
                             }
                             if (mesh.subMeshCount == num3)
                             {
                                 mesh.subMeshCount++;
                             }
-                            mesh.SetTriangles(array8, num3);
+                            mesh.SetTriangles(array6, num3);
                             num3++;
                             break;
                         }
                     case EntryType.MeshBoneWeights:
-                        array6 = new BoneWeight[num];
-                        for (int l = 0; l < num; l++)
                         {
-                            array6[l] = default(BoneWeight);
-                            array6[l].boneIndex0 = br.ReadInt32();
-                            array6[l].weight0 = br.ReadSingle();
-                            array6[l].boneIndex1 = br.ReadInt32();
-                            array6[l].weight1 = br.ReadSingle();
-                            array6[l].boneIndex2 = br.ReadInt32();
-                            array6[l].weight2 = br.ReadSingle();
-                            array6[l].boneIndex3 = br.ReadInt32();
-                            array6[l].weight3 = br.ReadSingle();
-                        }
-                        mesh.boneWeights = array6;
-                        break;
-                    case EntryType.MeshBindPoses:
-                        {
-                            int num4 = br.ReadInt32();
-                            Matrix4x4[] array9 = new Matrix4x4[num4];
-                            for (int i = 0; i < num4; i++)
+                            BoneWeight[] array7 = new BoneWeight[num];
+                            for (int num5 = 0; num5 < num; num5++)
                             {
-                                array9[i] = default(Matrix4x4);
-                                array9[i].m00 = br.ReadSingle();
-                                array9[i].m01 = br.ReadSingle();
-                                array9[i].m02 = br.ReadSingle();
-                                array9[i].m03 = br.ReadSingle();
-                                array9[i].m10 = br.ReadSingle();
-                                array9[i].m11 = br.ReadSingle();
-                                array9[i].m12 = br.ReadSingle();
-                                array9[i].m13 = br.ReadSingle();
-                                array9[i].m20 = br.ReadSingle();
-                                array9[i].m21 = br.ReadSingle();
-                                array9[i].m22 = br.ReadSingle();
-                                array9[i].m23 = br.ReadSingle();
-                                array9[i].m30 = br.ReadSingle();
-                                array9[i].m31 = br.ReadSingle();
-                                array9[i].m32 = br.ReadSingle();
-                                array9[i].m33 = br.ReadSingle();
+                                array7[num5] = default(BoneWeight);
+                                array7[num5].boneIndex0 = br.ReadInt32();
+                                array7[num5].weight0 = br.ReadSingle();
+                                array7[num5].boneIndex1 = br.ReadInt32();
+                                array7[num5].weight1 = br.ReadSingle();
+                                array7[num5].boneIndex2 = br.ReadInt32();
+                                array7[num5].weight2 = br.ReadSingle();
+                                array7[num5].boneIndex3 = br.ReadInt32();
+                                array7[num5].weight3 = br.ReadSingle();
                             }
-                            mesh.bindposes = array9;
+                            mesh.boneWeights = array7;
                             break;
                         }
+                    case EntryType.MeshBindPoses:
+                        {
+                            int num6 = br.ReadInt32();
+                            Matrix4x4[] array8 = new Matrix4x4[num6];
+                            for (int num7 = 0; num7 < num6; num7++)
+                            {
+                                array8[num7] = default(Matrix4x4);
+                                array8[num7].m00 = br.ReadSingle();
+                                array8[num7].m01 = br.ReadSingle();
+                                array8[num7].m02 = br.ReadSingle();
+                                array8[num7].m03 = br.ReadSingle();
+                                array8[num7].m10 = br.ReadSingle();
+                                array8[num7].m11 = br.ReadSingle();
+                                array8[num7].m12 = br.ReadSingle();
+                                array8[num7].m13 = br.ReadSingle();
+                                array8[num7].m20 = br.ReadSingle();
+                                array8[num7].m21 = br.ReadSingle();
+                                array8[num7].m22 = br.ReadSingle();
+                                array8[num7].m23 = br.ReadSingle();
+                                array8[num7].m30 = br.ReadSingle();
+                                array8[num7].m31 = br.ReadSingle();
+                                array8[num7].m32 = br.ReadSingle();
+                                array8[num7].m33 = br.ReadSingle();
+                            }
+                            mesh.bindposes = array8;
+                            break;
+                        }
+                    default:
+                        if (entryType == EntryType.MeshVertexColors)
+                        {
+                            Color32[] array9 = new Color32[num];
+                            for (int num8 = 0; num8 < num; num8++)
+                            {
+                                array9[num8] = new Color32(br.ReadByte(), br.ReadByte(), br.ReadByte(), br.ReadByte());
+                            }
+                            mesh.colors32 = array9;
+                        }
+                        break;
                 }
             }
             mesh.RecalculateBounds();
             return mesh;
         }
 
+        // Token: 0x06004AE8 RID: 19176 RVA: 0x001E30BC File Offset: 0x001E12BC
         private static Material ReadMaterial(BinaryReader br)
         {
             string name = br.ReadString();
-            ShaderType shaderType = (ShaderType)br.ReadInt32();
-            Material material = null;
-            switch (shaderType)
+            Material material;
+            switch (br.ReadInt32())
             {
                 default:
                     material = new Material(Shader.Find("KSP/Diffuse"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     break;
-                case ShaderType.Specular:
+                case 2:
                     material = new Material(Shader.Find("KSP/Specular"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     material.SetColor("_SpecColor", ChronoReader.ReadColor(br));
                     material.SetFloat("_Shininess", br.ReadSingle());
                     break;
-                case ShaderType.Bumped:
+                case 3:
                     material = new Material(Shader.Find("KSP/Bumped"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     ChronoReader.ReadMaterialTexture(br, material, "_BumpMap");
                     break;
-                case ShaderType.BumpedSpecular:
+                case 4:
                     material = new Material(Shader.Find("KSP/Bumped Specular"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     ChronoReader.ReadMaterialTexture(br, material, "_BumpMap");
                     material.SetColor("_SpecColor", ChronoReader.ReadColor(br));
                     material.SetFloat("_Shininess", br.ReadSingle());
                     break;
-                case ShaderType.Emissive:
+                case 5:
                     material = new Material(Shader.Find("KSP/Emissive/Diffuse"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     ChronoReader.ReadMaterialTexture(br, material, "_Emissive");
                     material.SetColor(PropertyIDs._EmissiveColor, ChronoReader.ReadColor(br));
                     break;
-                case ShaderType.EmissiveSpecular:
+                case 6:
                     material = new Material(Shader.Find("KSP/Emissive/Specular"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     material.SetColor("_SpecColor", ChronoReader.ReadColor(br));
@@ -706,7 +602,7 @@ namespace Chrononaut
                     ChronoReader.ReadMaterialTexture(br, material, "_Emissive");
                     material.SetColor(PropertyIDs._EmissiveColor, ChronoReader.ReadColor(br));
                     break;
-                case ShaderType.EmissiveBumpedSpecular:
+                case 7:
                     material = new Material(Shader.Find("KSP/Emissive/Bumped Specular"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     ChronoReader.ReadMaterialTexture(br, material, "_BumpMap");
@@ -715,58 +611,59 @@ namespace Chrononaut
                     ChronoReader.ReadMaterialTexture(br, material, "_Emissive");
                     material.SetColor(PropertyIDs._EmissiveColor, ChronoReader.ReadColor(br));
                     break;
-                case ShaderType.AlphaCutout:
+                case 8:
                     material = new Material(Shader.Find("KSP/Alpha/Cutoff"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     material.SetFloat("_Cutoff", br.ReadSingle());
                     break;
-                case ShaderType.AlphaCutoutBumped:
+                case 9:
                     material = new Material(Shader.Find("KSP/Alpha/Cutoff Bumped"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     ChronoReader.ReadMaterialTexture(br, material, "_BumpMap");
                     material.SetFloat("_Cutoff", br.ReadSingle());
                     break;
-                case ShaderType.Alpha:
+                case 10:
                     material = new Material(Shader.Find("KSP/Alpha/Translucent"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     break;
-                case ShaderType.AlphaSpecular:
+                case 11:
                     material = new Material(Shader.Find("KSP/Alpha/Translucent Specular"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     material.SetFloat("_Gloss", br.ReadSingle());
                     material.SetColor("_SpecColor", ChronoReader.ReadColor(br));
                     material.SetFloat("_Shininess", br.ReadSingle());
                     break;
-                case ShaderType.AlphaUnlit:
+                case 12:
                     material = new Material(Shader.Find("KSP/Alpha/Unlit Transparent"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     material.SetColor("_Color", ChronoReader.ReadColor(br));
                     break;
-                case ShaderType.Unlit:
+                case 13:
                     material = new Material(Shader.Find("KSP/Unlit"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     material.SetColor("_Color", ChronoReader.ReadColor(br));
                     break;
-                case ShaderType.ParticleAlpha:
+                case 14:
                     material = new Material(Shader.Find("KSP/Particles/Alpha Blended"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     material.SetColor("_Color", ChronoReader.ReadColor(br));
                     material.SetFloat("_InvFade", br.ReadSingle());
                     break;
-                case ShaderType.ParticleAdditive:
+                case 15:
                     material = new Material(Shader.Find("KSP/Particles/Additive"));
                     ChronoReader.ReadMaterialTexture(br, material, "_MainTex");
                     material.SetColor("_Color", ChronoReader.ReadColor(br));
                     material.SetFloat("_InvFade", br.ReadSingle());
                     break;
             }
-            if ((UnityEngine.Object)material != (UnityEngine.Object)null)
+            if (material != null)
             {
                 material.name = name;
             }
             return material;
         }
 
+        // Token: 0x06004AE9 RID: 19177 RVA: 0x001E34DC File Offset: 0x001E16DC
         private static Material ReadMaterial4(BinaryReader br)
         {
             string name = br.ReadString();
@@ -800,6 +697,7 @@ namespace Chrononaut
             return material;
         }
 
+        // Token: 0x06004AEA RID: 19178 RVA: 0x001E35A8 File Offset: 0x001E17A8
         private static void ReadMaterialTexture(BinaryReader br, Material mat, string textureName)
         {
             ChronoReader.textureDummies.AddTextureDummy(br.ReadInt32(), mat, textureName);
@@ -812,6 +710,7 @@ namespace Chrononaut
             mat.SetTextureOffset(textureName, value);
         }
 
+        // Token: 0x06004AEB RID: 19179 RVA: 0x001E3618 File Offset: 0x001E1818
         private static void ReadAnimation(BinaryReader br, GameObject o)
         {
             Animation animation = o.AddComponent<Animation>();
@@ -862,7 +761,16 @@ namespace Chrononaut
                     animationCurve.postWrapMode = postWrapMode;
                     if (text == null || type == null || text2 == null || animationCurve == null)
                     {
-                        Debug.Log(text + ", " + type + ", " + text2 + ", " + animationCurve);
+                        Debug.Log(string.Concat(new object[]
+                        {
+                        text,
+                        ", ",
+                        type,
+                        ", ",
+                        text2,
+                        ", ",
+                        animationCurve
+                        }));
                     }
                     animationClip.SetCurve(text, type, text2, animationCurve);
                 }
@@ -876,6 +784,7 @@ namespace Chrononaut
             animation.playAutomatically = br.ReadBoolean();
         }
 
+        // Token: 0x06004AEC RID: 19180 RVA: 0x001E388C File Offset: 0x001E1A8C
         private static void ReadAnimationEvents(BinaryReader br, GameObject o)
         {
             Animation animation = o.AddComponent<Animation>();
@@ -920,10 +829,11 @@ namespace Chrononaut
                         array[k].outTangent = br.ReadSingle();
                         array[k].tangentMode = br.ReadInt32();
                     }
-                    AnimationCurve animationCurve = new AnimationCurve(array);
-                    animationCurve.preWrapMode = preWrapMode;
-                    animationCurve.postWrapMode = postWrapMode;
-                    animationClip.SetCurve(relativePath, type, propertyName, animationCurve);
+                    animationClip.SetCurve(relativePath, type, propertyName, new AnimationCurve(array)
+                    {
+                        preWrapMode = preWrapMode,
+                        postWrapMode = postWrapMode
+                    });
                     int num4 = br.ReadInt32();
                     Debug.Log("EVTS: " + num4);
                     for (int l = 0; l < num4; l++)
@@ -954,6 +864,7 @@ namespace Chrononaut
             animation.playAutomatically = br.ReadBoolean();
         }
 
+        // Token: 0x06004AED RID: 19181 RVA: 0x001E3B9C File Offset: 0x001E1D9C
         private static void ReadLight(BinaryReader br, GameObject o)
         {
             Light light = o.AddComponent<Light>();
@@ -968,12 +879,14 @@ namespace Chrononaut
             }
         }
 
+        // Token: 0x06004AEE RID: 19182 RVA: 0x00038C69 File Offset: 0x00036E69
         private static void ReadTagAndLayer(BinaryReader br, GameObject o)
         {
             o.tag = br.ReadString();
             o.layer = br.ReadInt32();
         }
 
+        // Token: 0x06004AEF RID: 19183 RVA: 0x001E3C00 File Offset: 0x001E1E00
         private static void ReadCamera(BinaryReader br, GameObject o)
         {
             Camera camera = o.AddComponent<Camera>();
@@ -985,93 +898,94 @@ namespace Chrononaut
             camera.nearClipPlane = br.ReadSingle();
             camera.farClipPlane = br.ReadSingle();
             camera.depth = br.ReadSingle();
-            //camera.enabled = false;
+            camera.enabled = false;
         }
 
+        // Token: 0x06004AF0 RID: 19184 RVA: 0x001E3C7C File Offset: 0x001E1E7C
         private static void ReadParticles(BinaryReader br, GameObject o)
         {
-            KSPParticleEmitter kSPParticleEmitter = o.AddComponent<KSPParticleEmitter>();
-            kSPParticleEmitter.emit = br.ReadBoolean();
-            kSPParticleEmitter.shape = (KSPParticleEmitter.EmissionShape)br.ReadInt32();
-            kSPParticleEmitter.shape3D.x = br.ReadSingle();
-            kSPParticleEmitter.shape3D.y = br.ReadSingle();
-            kSPParticleEmitter.shape3D.z = br.ReadSingle();
-            kSPParticleEmitter.shape2D.x = br.ReadSingle();
-            kSPParticleEmitter.shape2D.y = br.ReadSingle();
-            kSPParticleEmitter.shape1D = br.ReadSingle();
-            kSPParticleEmitter.color = ChronoReader.ReadColor(br);
-            kSPParticleEmitter.useWorldSpace = br.ReadBoolean();
-            kSPParticleEmitter.minSize = br.ReadSingle();
-            kSPParticleEmitter.maxSize = br.ReadSingle();
-            kSPParticleEmitter.minEnergy = br.ReadSingle();
-            kSPParticleEmitter.maxEnergy = br.ReadSingle();
-            kSPParticleEmitter.minEmission = br.ReadInt32();
-            kSPParticleEmitter.maxEmission = br.ReadInt32();
-            kSPParticleEmitter.worldVelocity.x = br.ReadSingle();
-            kSPParticleEmitter.worldVelocity.y = br.ReadSingle();
-            kSPParticleEmitter.worldVelocity.z = br.ReadSingle();
-            kSPParticleEmitter.localVelocity.x = br.ReadSingle();
-            kSPParticleEmitter.localVelocity.y = br.ReadSingle();
-            kSPParticleEmitter.localVelocity.z = br.ReadSingle();
-            kSPParticleEmitter.rndVelocity.x = br.ReadSingle();
-            kSPParticleEmitter.rndVelocity.y = br.ReadSingle();
-            kSPParticleEmitter.rndVelocity.z = br.ReadSingle();
-            kSPParticleEmitter.emitterVelocityScale = br.ReadSingle();
-            kSPParticleEmitter.angularVelocity = br.ReadSingle();
-            kSPParticleEmitter.rndAngularVelocity = br.ReadSingle();
-            kSPParticleEmitter.rndRotation = br.ReadBoolean();
-            kSPParticleEmitter.doesAnimateColor = br.ReadBoolean();
-            kSPParticleEmitter.colorAnimation = new Color[5];
+            KSPParticleEmitter kspparticleEmitter = o.AddComponent<KSPParticleEmitter>();
+            kspparticleEmitter.emit = br.ReadBoolean();
+            kspparticleEmitter.shape = (KSPParticleEmitter.EmissionShape)br.ReadInt32();
+            kspparticleEmitter.shape3D.x = br.ReadSingle();
+            kspparticleEmitter.shape3D.y = br.ReadSingle();
+            kspparticleEmitter.shape3D.z = br.ReadSingle();
+            kspparticleEmitter.shape2D.x = br.ReadSingle();
+            kspparticleEmitter.shape2D.y = br.ReadSingle();
+            kspparticleEmitter.shape1D = br.ReadSingle();
+            kspparticleEmitter.color = ChronoReader.ReadColor(br);
+            kspparticleEmitter.useWorldSpace = br.ReadBoolean();
+            kspparticleEmitter.minSize = br.ReadSingle();
+            kspparticleEmitter.maxSize = br.ReadSingle();
+            kspparticleEmitter.minEnergy = br.ReadSingle();
+            kspparticleEmitter.maxEnergy = br.ReadSingle();
+            kspparticleEmitter.minEmission = br.ReadInt32();
+            kspparticleEmitter.maxEmission = br.ReadInt32();
+            kspparticleEmitter.worldVelocity.x = br.ReadSingle();
+            kspparticleEmitter.worldVelocity.y = br.ReadSingle();
+            kspparticleEmitter.worldVelocity.z = br.ReadSingle();
+            kspparticleEmitter.localVelocity.x = br.ReadSingle();
+            kspparticleEmitter.localVelocity.y = br.ReadSingle();
+            kspparticleEmitter.localVelocity.z = br.ReadSingle();
+            kspparticleEmitter.rndVelocity.x = br.ReadSingle();
+            kspparticleEmitter.rndVelocity.y = br.ReadSingle();
+            kspparticleEmitter.rndVelocity.z = br.ReadSingle();
+            kspparticleEmitter.emitterVelocityScale = br.ReadSingle();
+            kspparticleEmitter.angularVelocity = br.ReadSingle();
+            kspparticleEmitter.rndAngularVelocity = br.ReadSingle();
+            kspparticleEmitter.rndRotation = br.ReadBoolean();
+            kspparticleEmitter.doesAnimateColor = br.ReadBoolean();
+            kspparticleEmitter.colorAnimation = new Color[5];
             for (int i = 0; i < 5; i++)
             {
-                kSPParticleEmitter.colorAnimation[i] = ChronoReader.ReadColor(br);
+                kspparticleEmitter.colorAnimation[i] = ChronoReader.ReadColor(br);
             }
-            kSPParticleEmitter.worldRotationAxis.x = br.ReadSingle();
-            kSPParticleEmitter.worldRotationAxis.y = br.ReadSingle();
-            kSPParticleEmitter.worldRotationAxis.z = br.ReadSingle();
-            kSPParticleEmitter.localRotationAxis.x = br.ReadSingle();
-            kSPParticleEmitter.localRotationAxis.y = br.ReadSingle();
-            kSPParticleEmitter.localRotationAxis.z = br.ReadSingle();
-            kSPParticleEmitter.sizeGrow = br.ReadSingle();
-            kSPParticleEmitter.rndForce.x = br.ReadSingle();
-            kSPParticleEmitter.rndForce.y = br.ReadSingle();
-            kSPParticleEmitter.rndForce.z = br.ReadSingle();
-            kSPParticleEmitter.force.x = br.ReadSingle();
-            kSPParticleEmitter.force.y = br.ReadSingle();
-            kSPParticleEmitter.force.z = br.ReadSingle();
-            kSPParticleEmitter.damping = br.ReadSingle();
-            kSPParticleEmitter.castShadows = br.ReadBoolean();
-            kSPParticleEmitter.recieveShadows = br.ReadBoolean();
-            kSPParticleEmitter.lengthScale = br.ReadSingle();
-            kSPParticleEmitter.velocityScale = br.ReadSingle();
-            kSPParticleEmitter.maxParticleSize = br.ReadSingle();
+            kspparticleEmitter.worldRotationAxis.x = br.ReadSingle();
+            kspparticleEmitter.worldRotationAxis.y = br.ReadSingle();
+            kspparticleEmitter.worldRotationAxis.z = br.ReadSingle();
+            kspparticleEmitter.localRotationAxis.x = br.ReadSingle();
+            kspparticleEmitter.localRotationAxis.y = br.ReadSingle();
+            kspparticleEmitter.localRotationAxis.z = br.ReadSingle();
+            kspparticleEmitter.sizeGrow = br.ReadSingle();
+            kspparticleEmitter.rndForce.x = br.ReadSingle();
+            kspparticleEmitter.rndForce.y = br.ReadSingle();
+            kspparticleEmitter.rndForce.z = br.ReadSingle();
+            kspparticleEmitter.force.x = br.ReadSingle();
+            kspparticleEmitter.force.y = br.ReadSingle();
+            kspparticleEmitter.force.z = br.ReadSingle();
+            kspparticleEmitter.damping = br.ReadSingle();
+            kspparticleEmitter.castShadows = br.ReadBoolean();
+            kspparticleEmitter.recieveShadows = br.ReadBoolean();
+            kspparticleEmitter.lengthScale = br.ReadSingle();
+            kspparticleEmitter.velocityScale = br.ReadSingle();
+            kspparticleEmitter.maxParticleSize = br.ReadSingle();
             switch (br.ReadInt32())
             {
                 default:
-                    kSPParticleEmitter.particleRenderMode = ParticleSystemRenderMode.Billboard;
+                    kspparticleEmitter.particleRenderMode = ParticleSystemRenderMode.Billboard;
                     break;
                 case 3:
-                    kSPParticleEmitter.particleRenderMode = ParticleSystemRenderMode.Stretch;
+                    kspparticleEmitter.particleRenderMode = ParticleSystemRenderMode.Stretch;
                     break;
                 case 4:
-                    kSPParticleEmitter.particleRenderMode = ParticleSystemRenderMode.HorizontalBillboard;
+                    kspparticleEmitter.particleRenderMode = ParticleSystemRenderMode.HorizontalBillboard;
                     break;
                 case 5:
-                    kSPParticleEmitter.particleRenderMode = ParticleSystemRenderMode.VerticalBillboard;
+                    kspparticleEmitter.particleRenderMode = ParticleSystemRenderMode.VerticalBillboard;
                     break;
             }
-            kSPParticleEmitter.uvAnimationXTile = br.ReadInt32();
-            kSPParticleEmitter.uvAnimationYTile = br.ReadInt32();
-            kSPParticleEmitter.uvAnimationCycles = br.ReadInt32();
-            int num = br.ReadInt32();
-            while (num >= ChronoReader.matDummies.Count)
+            kspparticleEmitter.uvAnimationXTile = br.ReadInt32();
+            kspparticleEmitter.uvAnimationYTile = br.ReadInt32();
+            kspparticleEmitter.uvAnimationCycles = br.ReadInt32();
+            int j = br.ReadInt32();
+            while (j >= ChronoReader.matDummies.Count)
             {
-                ChronoReader.matDummies.Add(new MaterialDummy());
+                ChronoReader.matDummies.Add(new ChronoReader.MaterialDummy());
             }
-            //kSPParticleEmitter.enabled = false;
-            ChronoReader.matDummies[num].particleEmitters.Add(kSPParticleEmitter);
+            ChronoReader.matDummies[j].particleEmitters.Add(kspparticleEmitter);
         }
 
+        // Token: 0x06004AF1 RID: 19185 RVA: 0x001E4034 File Offset: 0x001E2234
         public static Transform FindChildByName(Transform parent, string name)
         {
             if (parent.name == name)
@@ -1083,9 +997,10 @@ namespace Chrononaut
             {
                 while (enumerator.MoveNext())
                 {
-                    Transform parent2 = (Transform)enumerator.Current;
+                    object obj = enumerator.Current;
+                    Transform parent2 = (Transform)obj;
                     Transform transform = ChronoReader.FindChildByName(parent2, name);
-                    if ((UnityEngine.Object)transform != (UnityEngine.Object)null)
+                    if (transform != null)
                     {
                         return transform;
                     }
@@ -1102,24 +1017,186 @@ namespace Chrononaut
             return null;
         }
 
+        // Token: 0x06004AF2 RID: 19186 RVA: 0x00038C83 File Offset: 0x00036E83
         private static Color ReadColor(BinaryReader br)
         {
             return new Color(br.ReadSingle(), br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
         }
 
+        // Token: 0x06004AF3 RID: 19187 RVA: 0x00038CA2 File Offset: 0x00036EA2
         private static Vector4 ReadVector2(BinaryReader br)
         {
             return new Vector2(br.ReadSingle(), br.ReadSingle());
         }
 
+        // Token: 0x06004AF4 RID: 19188 RVA: 0x00038CBA File Offset: 0x00036EBA
         private static Vector4 ReadVector3(BinaryReader br)
         {
             return new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
         }
 
+        // Token: 0x06004AF5 RID: 19189 RVA: 0x00038CD8 File Offset: 0x00036ED8
         private static Vector4 ReadVector4(BinaryReader br)
         {
             return new Vector4(br.ReadSingle(), br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
+        }
+
+        // Token: 0x04004486 RID: 17542
+        private static int fileVersion;
+
+        // Token: 0x04004487 RID: 17543
+        private static UrlDir.UrlFile file;
+
+        // Token: 0x04004488 RID: 17544
+        private static List<ChronoReader.MaterialDummy> matDummies;
+
+        // Token: 0x04004489 RID: 17545
+        private static List<ChronoReader.BonesDummy> boneDummies;
+
+        // Token: 0x0400448A RID: 17546
+        private static ChronoReader.TextureDummyList textureDummies;
+
+        // Token: 0x0400448B RID: 17547
+        private static Shader shaderUnlit;
+
+        // Token: 0x0400448C RID: 17548
+        private static Shader shaderDiffuse;
+
+        // Token: 0x0400448D RID: 17549
+        private static Shader shaderSpecular;
+
+        // Token: 0x0400448E RID: 17550
+        public static bool shaderFallback;
+
+        // Token: 0x02000964 RID: 2404
+        public enum ShaderPropertyType
+        {
+            // Token: 0x04004490 RID: 17552
+            Color,
+            // Token: 0x04004491 RID: 17553
+            Vector,
+            // Token: 0x04004492 RID: 17554
+            Float,
+            // Token: 0x04004493 RID: 17555
+            Range,
+            // Token: 0x04004494 RID: 17556
+            TexEnv
+        }
+
+        // Token: 0x02000965 RID: 2405
+        private class MaterialDummy
+        {
+            // Token: 0x06004AF6 RID: 19190 RVA: 0x00038CF7 File Offset: 0x00036EF7
+            public MaterialDummy()
+            {
+                this.renderers = new List<Renderer>();
+                this.particleEmitters = new List<KSPParticleEmitter>();
+            }
+
+            // Token: 0x04004495 RID: 17557
+            public List<Renderer> renderers;
+
+            // Token: 0x04004496 RID: 17558
+            public List<KSPParticleEmitter> particleEmitters;
+        }
+
+        // Token: 0x02000966 RID: 2406
+        private class BonesDummy
+        {
+            // Token: 0x06004AF7 RID: 19191 RVA: 0x00038D15 File Offset: 0x00036F15
+            public BonesDummy()
+            {
+                this.bones = new List<string>();
+            }
+
+            // Token: 0x04004497 RID: 17559
+            public SkinnedMeshRenderer smr;
+
+            // Token: 0x04004498 RID: 17560
+            public List<string> bones;
+        }
+
+        // Token: 0x02000967 RID: 2407
+        private class TextureMaterialDummy
+        {
+            // Token: 0x06004AF8 RID: 19192 RVA: 0x00038D28 File Offset: 0x00036F28
+            public TextureMaterialDummy(Material material)
+            {
+                this.material = material;
+                this.shaderName = new List<string>();
+            }
+
+            // Token: 0x04004499 RID: 17561
+            public Material material;
+
+            // Token: 0x0400449A RID: 17562
+            public List<string> shaderName;
+        }
+
+        // Token: 0x02000968 RID: 2408
+        private class TextureDummy : List<ChronoReader.TextureMaterialDummy>
+        {
+            // Token: 0x06004AFA RID: 19194 RVA: 0x001E40AC File Offset: 0x001E22AC
+            public bool Contains(Material material)
+            {
+                int count = base.Count;
+                while (count-- > 0)
+                {
+                    if (base[count].material == material)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            // Token: 0x06004AFB RID: 19195 RVA: 0x001E40E4 File Offset: 0x001E22E4
+            public ChronoReader.TextureMaterialDummy Get(Material material)
+            {
+                int i = 0;
+                int count = base.Count;
+                while (i < count)
+                {
+                    if (base[i].material == material)
+                    {
+                        return base[i];
+                    }
+                    i++;
+                }
+                return null;
+            }
+
+            // Token: 0x06004AFC RID: 19196 RVA: 0x001E4124 File Offset: 0x001E2324
+            public void AddMaterialDummy(Material material, string shaderName)
+            {
+                ChronoReader.TextureMaterialDummy textureMaterialDummy = this.Get(material);
+                if (textureMaterialDummy == null)
+                {
+                    base.Add(textureMaterialDummy = new ChronoReader.TextureMaterialDummy(material));
+                }
+                if (!textureMaterialDummy.shaderName.Contains(shaderName))
+                {
+                    textureMaterialDummy.shaderName.Add(shaderName);
+                }
+            }
+        }
+
+        // Token: 0x02000969 RID: 2409
+        private class TextureDummyList : List<ChronoReader.TextureDummy>
+        {
+            // Token: 0x06004AFE RID: 19198 RVA: 0x00038D52 File Offset: 0x00036F52
+            public void AddTextureDummy(int textureID, Material material, string shaderName)
+            {
+                if (textureID == -1)
+                {
+                    return;
+                }
+                while (textureID >= base.Count)
+                {
+                    base.Add(new ChronoReader.TextureDummy());
+                }
+                base[textureID].AddMaterialDummy(material, shaderName);
+            }
         }
     }
 }
