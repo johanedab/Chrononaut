@@ -26,8 +26,6 @@ namespace Chrononaut
     [KSPAddon(KSPAddon.Startup.FlightAndEditor, false /*once*/)]
     public class Chrononaut : MonoBehaviour
     {
-        public int version = 1;
-
         // Get the AvailablePart from a partName, since it will give additional
         // info that is not available in the Part class.
         // Not needed since Part.partInfo points to the correct AvailablePart.
@@ -94,23 +92,6 @@ namespace Chrononaut
             }
         }
 
-        public void Update()
-        {
-            version = 2;
-            if (Input.GetKeyDown(KeyCode.F8))
-            {
-                Debug.Log("*** Chrononaut ***");
-
-                // Retrieve the active vessel and its parts
-                Vessel vessel = FlightGlobals.ActiveVessel;
-                List<Part> parts = vessel.parts;
-
-                // Loop through all parts of the vessel to update them
-                foreach (Part part in parts)
-                    UpdatePart(part);
-            }
-        }
-
         // Use reflection to get a method of a potentially hidden class
         object RunMethod(string assemblyName, string className, string methodName, object[] parameters)
         {
@@ -140,6 +121,30 @@ namespace Chrononaut
 
             // Run the method
             return methodInfo.Invoke(type, parameters);
+        }
+
+        public void Update()
+        {
+            if (Input.GetKeyDown(KeyCode.F8))
+                UpdateParts();
+        }
+
+        public void UpdateParts()
+        {
+            Debug.Log("*** Chrononaut ***");
+
+            // Retrieve the active vessel and its parts
+            Vessel vessel = FlightGlobals.ActiveVessel;
+            List<Part> parts = null;
+
+            if (vessel)
+                parts = vessel.parts;
+            else
+                parts = EditorLogic.fetch.ship.parts;
+
+            // Loop through all parts of the vessel to update them
+            foreach (Part part in parts)
+                UpdatePart(part);
         }
 
         private void UpdatePart(Part part)
@@ -181,7 +186,6 @@ namespace Chrononaut
 
             // Access the internal PartReader.Read method by reflection.
             GameObject obj = (GameObject) RunMethod(
-                //"Assembly-CSharp",
                 "KSP_x64_Data/Managed/Assembly-CSharp.dll",
                 "PartReader",
                 "Read",
