@@ -26,7 +26,37 @@ namespace Chrononaut
     [KSPAddon(KSPAddon.Startup.FlightAndEditor, false /*once*/)]
     public class Chrononaut : MonoBehaviour
     {
-        // Get the AvailablePart from a partName, since it will give additional
+        bool configLoaded;
+        [Persistent] public string keyReloadVessel = "f8";
+
+        private void LoadConfig()
+        {
+            Debug.Log("*** Chrononaut:LoadConfig ***");
+
+            // Load the settings file
+            ConfigNode settings = ConfigNode.Load(KSPUtil.ApplicationRootPath + "GameData/Chrononaut/Settings.cfg");
+            if (settings == null)
+            {
+                Debug.LogError("Failed to open settings file");
+                return;
+            }
+
+            Debug.Log("settings: " + settings);
+
+            // Load the settings into this class
+            ConfigNode.LoadObjectFromConfig(this, settings);
+
+            // Try to use the key reference. If it doesn't work, configLoaded will not be set
+            Input.GetKeyDown(keyReloadVessel);
+            configLoaded = true;
+        }
+
+        private void Awake()
+        {
+            LoadConfig();
+        }
+
+            // Get the AvailablePart from a partName, since it will give additional
         // info that is not available in the Part class.
         // Not needed since Part.partInfo points to the correct AvailablePart.
         private AvailablePart GetAvailablePart(string partName)
@@ -125,13 +155,17 @@ namespace Chrononaut
 
         public void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F8))
+            // Make sure to bail out if the config is correctly loaded
+            if (!configLoaded)
+                return;
+
+            if (Input.GetKeyDown(keyReloadVessel))
                 UpdateParts();
         }
 
         public void UpdateParts()
         {
-            Debug.Log("*** Chrononaut ***");
+            Debug.Log("*** Chrononaut:UpdateParts ***");
 
             // Retrieve the active vessel and its parts
             Vessel vessel = FlightGlobals.ActiveVessel;
