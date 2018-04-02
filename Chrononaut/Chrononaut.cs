@@ -1,4 +1,6 @@
-﻿/*
+﻿// #define CHRONO_DEBUG
+
+/*
  * Tools used to make modding faster
  */
 
@@ -21,23 +23,25 @@ namespace Chrononaut
     using System.Reflection;
     using UnityEngine;
     using UnityEngine.Rendering;
+    using UnityEngine.UI;
     using static GameDatabase;
 
     [KSPAddon(KSPAddon.Startup.FlightAndEditor, false /*once*/)]
     public class Chrononaut : MonoBehaviour
     {
         bool configLoaded;
+
         [Persistent] public string keyReloadVessel = "f8";
 
         private void LoadConfig()
         {
-            Debug.Log("*** Chrononaut:LoadConfig ***");
+            Debug.Log("*** Chrononaut_v0.3.0:LoadConfig ***");
 
             // Load the settings file
             ConfigNode settings = ConfigNode.Load(KSPUtil.ApplicationRootPath + "GameData/Chrononaut/Settings.cfg");
             if (settings == null)
             {
-                Debug.LogError("Failed to open settings file");
+                Debug.LogError("Chrononaut:LoadConfig(): Failed to open settings file");
                 return;
             }
 
@@ -46,7 +50,8 @@ namespace Chrononaut
             // Load the settings into this class
             ConfigNode.LoadObjectFromConfig(this, settings);
 
-            // Try to use the key reference. If it doesn't work, configLoaded will not be set
+            // Try to use the key reference. If it doesn't work, an exception 
+            // will be thrown and configLoaded will not be set
             Input.GetKeyDown(keyReloadVessel);
             configLoaded = true;
         }
@@ -56,7 +61,7 @@ namespace Chrononaut
             LoadConfig();
         }
 
-            // Get the AvailablePart from a partName, since it will give additional
+        // Get the AvailablePart from a partName, since it will give additional
         // info that is not available in the Part class.
         // Not needed since Part.partInfo points to the correct AvailablePart.
         private AvailablePart GetAvailablePart(string partName)
@@ -66,7 +71,7 @@ namespace Chrononaut
             partName = partName.Split(' ')[0];
 
             // Loop through the PartLoader list to search for the part name
-            List< AvailablePart> availableParts = PartLoader.LoadedPartsList;
+            List<AvailablePart> availableParts = PartLoader.LoadedPartsList;
             foreach (AvailablePart availablePart in availableParts)
                 if (partName == availablePart.name)
                     return availablePart;
@@ -76,7 +81,7 @@ namespace Chrononaut
         }
 
         // Get the model file name for a part by reading the cfg file contents
-        string GetModelFileName(Part part)
+        UrlDir.UrlFile GetModelFile(Part part)
         {
             AvailablePart availablePart = part.partInfo;
 
@@ -91,8 +96,8 @@ namespace Chrononaut
             */
 
             // Check for an entry in either the PART.model property or the PART.MODEL.model value
-            string model = availablePart.partConfig.GetValue("mesh");
-            if (model != null)
+            string modelName = availablePart.partConfig.GetValue("mesh");
+            if (modelName != null)
             {
                 // The "url" is on the firmat "Parts/<PartType>/<ConfigFileName>/<PartName>
                 // We need to strip away the ConfigFileName and PartName to get the real path
@@ -101,12 +106,20 @@ namespace Chrononaut
                 for (int i = 0; i < urlParts.Count() - 2; i++)
                     url += urlParts[i] + "/";
 
-                model = url + model;
+                modelName = url + modelName;
             }
             else
-                model = availablePart.partConfig.GetNode("MODEL").GetValue("model") + ".mu";
-            
-            return model;
+                modelName = availablePart.partConfig.GetNode("MODEL").GetValue("model") + ".mu";
+
+            // Calculate the proper URLs for the file
+            string directory = Path.GetDirectoryName(modelName);
+            FileInfo file = new FileInfo("GameData/" + modelName);
+
+            // Generate the root directory
+            UrlDir root = UrlBuilder.CreateDir(directory);
+
+            // Create the full path and name of the model file
+            return new UrlDir.UrlFile(root, file);
         }
 
         // Print the list of textures for debugging purposes
@@ -115,7 +128,7 @@ namespace Chrononaut
             TextureInfo textureInfo;
             GameDatabase gdb = GameDatabase.Instance;
             Debug.Log("count: " + gdb.databaseTexture.Count);
-            for(int i=0;i< gdb.databaseTexture.Count;i++)
+            for (int i = 0; i < gdb.databaseTexture.Count; i++)
             {
                 textureInfo = gdb.databaseTexture[i];
                 Debug.Log("tex: " + textureInfo.name + ", " + textureInfo.file);
@@ -153,19 +166,45 @@ namespace Chrononaut
             return methodInfo.Invoke(type, parameters);
         }
 
+        // Load the model file requested from file and return it as a GameObject.
+        private GameObject LoadModelFile(UrlDir.UrlFile modelFile)
+        {
+            GameObject loadedObject = null;
+
+            // Access the internal PartReader.Read method by reflection to read it.
+            loadedObject = (GameObject)RunMethod(
+                "KSP_x64_Data/Managed/Assembly-CSharp.dll",
+                "PartReader",
+                "Read",
+                new object[] { modelFile });
+
+            // Alternative reference implementation of PartReader for being able to add debug messages
+            // loadedObject = ChronoReader.Read(urlFile);
+
+            if (loadedObject == null)
+            {
+                Debug.LogError("Chrononaut:LoadModelFile(): Failed to read file: " + modelFile.name);
+                return null;
+            }
+            return loadedObject;
+        }
+
+        // Called frequently in the flight scene and the VAB editor
         public void Update()
         {
             // Make sure to bail out if the config is correctly loaded
             if (!configLoaded)
                 return;
 
+            // React to key presses from the user
             if (Input.GetKeyDown(keyReloadVessel))
                 UpdateParts();
         }
 
+        // Loop through all the parts to update them
         public void UpdateParts()
         {
-            Debug.Log("*** Chrononaut:UpdateParts ***");
+            Debug.Log("*** Chrononaut_v0.3.0:UpdateParts ***");
 
             // Retrieve the active vessel and its parts
             Vessel vessel = FlightGlobals.ActiveVessel;
@@ -178,27 +217,28 @@ namespace Chrononaut
 
             // Loop through all parts of the vessel to update them
             foreach (Part part in parts)
-                UpdatePart(part);
+            {
+                Debug.Log("Part: " + part.name);
+
+                // Get the model name including the relative path to GameData
+                UrlDir.UrlFile modelFile = GetModelFile(part);
+                Debug.Log("  Model: " + modelFile.name);
+
+                // Load the object from file
+                GameObject loadedObject = LoadModelFile(modelFile);
+
+                if (!loadedObject)
+                    continue;
+
+                Debug.Log("  LoadedObject: " + loadedObject.name);
+
+                // Perform the actual update of the part
+                UpdatePart(part, loadedObject);
+            }
         }
 
-        private void UpdatePart(Part part)
+        private void UpdatePart(Part part, GameObject loadedObject)
         {
-            Debug.Log("Part: " + part.name);
-
-            // Get the model name including the relative path to GameData
-            string modelName = GetModelFileName(part);
-            Debug.Log("  Model: " + modelName);
-
-            // Calculate the proper URLs for the file
-            string directory = Path.GetDirectoryName(modelName);
-            FileInfo file = new FileInfo("GameData/" + modelName);
-
-            // Generate the root directory
-            UrlDir root = UrlBuilder.CreateDir(directory);
-
-            // Create the full path and name of the model file
-            UrlDir.UrlFile urlFile = new UrlDir.UrlFile(root, file);
-
             /*
              * TESTS
             // Reference test of how GetTexture works
@@ -218,34 +258,72 @@ namespace Chrononaut
             GameObject obj = databaseLoader.obj;
             */
 
-            // Access the internal PartReader.Read method by reflection.
-            GameObject obj = (GameObject) RunMethod(
-                "KSP_x64_Data/Managed/Assembly-CSharp.dll",
-                "PartReader",
-                "Read",
-                new object[] { urlFile });
+            Transform model = part.transform.GetChild(0);
 
-            // Reference implementation for being able to add debug messages
-            //GameObject obj = ChronoReader.Read(urlFile);
-
-            if (obj == null)
+            // Check that we really found the expected model transform
+            if (!model || model.Equals(null) || model.name!="model")
             {
-                Debug.LogError("Chrononaut:UpdatePart(): Failed to read object");
+                Debug.LogError(string.Format("Transform 'model' not found! ({0})", model ? model.name : "null"));
                 return;
             }
 
-            // Destroy the object directly so it doesn't stay visible in the scene.
-            // Seems it is still accessible tho and can be read.
-            Destroy(obj);
+            // Search for the transform containing the model
+            Transform previousTransform = null;
+            for (int i = 0; i < model.transform.childCount; i++)
+            {
+                Transform child = model.transform.GetChild(i);
 
-            Debug.Log("  obj.name: " + obj.name);
+                // The "model" transform also contains the surface attach collider.
+                if (child.gameObject.name != "Surface Attach Collider")
+                    previousTransform = child;
+            }
+
+            // Check that we really found a previous transform
+            if (!previousTransform || previousTransform.Equals(null))
+            {
+                Debug.LogError(string.Format("Part model not found! ({0})", previousTransform ? previousTransform.name : "null"));
+                return;
+            }
+
+#if CHRONO_DEBUG
+            Debug.Log("Destroying object: " + previousTransform.gameObject.name);
+            Debug.Log(ChronoDebug.DumpPartHierarchy(loadedObject));
+            Debug.Log(ChronoDebug.DumpPartHierarchy(part.gameObject)); // transformDest.gameObject
+#endif
+
+            // Destroy the previous transform and its children
+            previousTransform.parent = null;
+            Destroy(previousTransform.gameObject);
+
+            // Set the parent of the new transform to the 'model' transform to make the former a child
+            // of the latter
+            Transform loadedTransform = loadedObject.transform;
+            loadedTransform.parent = model;
+
+            // Update the location and rotation the object, by copying them from the previous model
+            loadedTransform.position = previousTransform.position;
+            loadedTransform.rotation = previousTransform.rotation;
+
+            // To get the scaling right, we need to multiply it by the parents scale.
+            // This is probably due to an autimatic rescaling that occures when setting
+            // the parent of the transform to the 'model' transform
+            loadedTransform.localScale = Vector3.Scale(loadedTransform.localScale, previousTransform.localScale);
+        }
+
+        // This function is depracated, use CopyComplete
+        public void CopyMeshes(GameObject loadedObject, Part part)
+        {
+            // Destroy the object directly so it doesn't stay visible in the scene.
+            // It will still be accessible to read from during this function
+            Destroy(loadedObject);
 
             // Get all the MeshFilters in the source and the destination
-            MeshFilter[] meshFiltersSource = obj.GetComponentsInChildren<MeshFilter>();
+            MeshFilter[] meshFiltersSource = loadedObject.GetComponentsInChildren<MeshFilter>();
             List<MeshFilter> meshFiltersDest = part.FindModelComponents<MeshFilter>();
 
             // Loop through the destination meshes and replace them from the source.
             // This should be replaced by updating the complete structure instead.
+
             int i = 0;
             foreach (MeshFilter meshFilterDest in meshFiltersDest)
             {

@@ -51,6 +51,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ChronoDebug.cs" />
     <Compile Include="Chrononaut.cs" />
     <Compile Include="ChronoReader.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
