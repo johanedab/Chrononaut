@@ -118,8 +118,20 @@ namespace Chrononaut
             // Generate the root directory
             UrlDir root = UrlBuilder.CreateDir(directory);
 
+            UrlDir.UrlFile modelFile = new UrlDir.UrlFile(root, file);
+
+            // Apperently, if the file is name "model.mu" the reader is supposed to just
+            // pick the first file in the folder... =S
+            if (!File.Exists("GameData/" + modelName))
+            {
+                IEnumerable<UrlDir.UrlFile> modelFiles = root.GetFiles(UrlDir.FileType.Model);
+
+                foreach(UrlDir.UrlFile mFile in modelFiles)
+                    Debug.Log("modelFiles: " + mFile.name);
+            }
+
             // Create the full path and name of the model file
-            return new UrlDir.UrlFile(root, file);
+            return modelFile;
         }
 
         // Print the list of textures for debugging purposes
@@ -165,21 +177,46 @@ namespace Chrononaut
             // Run the method
             return methodInfo.Invoke(type, parameters);
         }
-
+        /*
+        public void Load(UrlDir.UrlFile urlFile, FileInfo file)
+        {
+            Debug.Log("Loading: " + urlFile.name + ", " + urlFile.fullPath);
+            GameObject gameObject = ChronoReader.Read(urlFile);
+            if ((UnityEngine.Object)gameObject != (UnityEngine.Object)null)
+            {
+                obj = gameObject;
+                successful = true;
+            }
+            else
+            {
+                Debug.LogWarning("Model load error in '" + file.FullName + "'");
+                obj = null;
+                successful = false;
+            }
+            //yield break;
+        }
+        */
         // Load the model file requested from file and return it as a GameObject.
         private GameObject LoadModelFile(UrlDir.UrlFile modelFile)
         {
             GameObject loadedObject = null;
 
-            // Access the internal PartReader.Read method by reflection to read it.
+            // Method 1: Access the internal PartReader.Read method by reflection to read it.
+            /*
             loadedObject = (GameObject)RunMethod(
                 "KSP_x64_Data/Managed/Assembly-CSharp.dll",
                 "PartReader",
                 "Read",
                 new object[] { modelFile });
+            */
 
-            // Alternative reference implementation of PartReader for being able to add debug messages
+            // Method 2: Alternative reference implementation of PartReader for being able to add debug messages
             // loadedObject = ChronoReader.Read(urlFile);
+
+            // Method 3: Use the database loader instead of the part reader directly
+            DatabaseLoaderModel_MU databaseLoader = new DatabaseLoaderModel_MU();
+            StartCoroutine(databaseLoader.Load(modelFile, null));
+            loadedObject = databaseLoader.obj;
 
             if (loadedObject == null)
             {
@@ -198,6 +235,7 @@ namespace Chrononaut
 
             // React to key presses from the user
             if (Input.GetKeyDown(keyReloadVessel))
+                // GameDatabase.Instance.loadObje
                 UpdateParts();
         }
 
@@ -218,11 +256,11 @@ namespace Chrononaut
             // Loop through all parts of the vessel to update them
             foreach (Part part in parts)
             {
-                Debug.Log("Part: " + part.name);
+                Debug.Log("Updating part: " + part.name);
 
                 // Get the model name including the relative path to GameData
                 UrlDir.UrlFile modelFile = GetModelFile(part);
-                Debug.Log("  Model: " + modelFile.name);
+                // Debug.Log("  Model: " + modelFile.name);
 
                 // Load the object from file
                 GameObject loadedObject = LoadModelFile(modelFile);
@@ -249,15 +287,6 @@ namespace Chrononaut
             Debug.Log("tex1: " + texture);
             */
 
-            /*
-             * TESTS
-             * Can we use the database loader instead of the part reader directly?
-            DatabaseLoaderModel_MU databaseLoader = new DatabaseLoaderModel_MU();
-            databaseLoader.Load(urlFile, file);
-            Debug.Log("success: " + (databaseLoader.successful ? "yes" : "no"));                    
-            GameObject obj = databaseLoader.obj;
-            */
-
             Transform model = part.transform.GetChild(0);
 
             // Check that we really found the expected model transform
@@ -267,33 +296,30 @@ namespace Chrononaut
                 return;
             }
 
-            // Search for the transform containing the model
-            Transform previousTransform = null;
-            for (int i = 0; i < model.transform.childCount; i++)
-            {
-                Transform child = model.transform.GetChild(i);
-
-                // The "model" transform also contains the surface attach collider.
-                if (child.gameObject.name != "Surface Attach Collider")
-                    previousTransform = child;
-            }
-
-            // Check that we really found a previous transform
-            if (!previousTransform || previousTransform.Equals(null))
-            {
-                Debug.LogError(string.Format("Part model not found! ({0})", previousTransform ? previousTransform.name : "null"));
-                return;
-            }
-
 #if CHRONO_DEBUG
-            Debug.Log("Destroying object: " + previousTransform.gameObject.name);
             Debug.Log(ChronoDebug.DumpPartHierarchy(loadedObject));
             Debug.Log(ChronoDebug.DumpPartHierarchy(part.gameObject)); // transformDest.gameObject
 #endif
 
-            // Destroy the previous transform and its children
-            previousTransform.parent = null;
-            Destroy(previousTransform.gameObject);
+            // Search for the transform containing the model
+            //Transform previousTransform = null;
+            for (int i = 0; i < model.transform.childCount; i++)
+            {
+                Transform child = model.transform.GetChild(i);
+
+                // The "model" transform contains some special transforms apart from the actual model.
+                switch (child.gameObject.name)
+                {
+                    case "Surface Attach Collider":
+                        break;
+                    default:
+                        // Destroy all other objects in the model transform
+                        // child.parent = null;
+                        Destroy(child.gameObject);
+                        Debug.Log("Destroying object: " + child.gameObject.name);
+                        break;
+                }
+            }
 
             // Set the parent of the new transform to the 'model' transform to make the former a child
             // of the latter
@@ -301,13 +327,21 @@ namespace Chrononaut
             loadedTransform.parent = model;
 
             // Update the location and rotation the object, by copying them from the previous model
-            loadedTransform.position = previousTransform.position;
-            loadedTransform.rotation = previousTransform.rotation;
+            loadedTransform.position = model.position;
+            loadedTransform.rotation = model.rotation;
 
-            // To get the scaling right, we need to multiply it by the parents scale.
-            // This is probably due to an autimatic rescaling that occures when setting
-            // the parent of the transform to the 'model' transform
-            loadedTransform.localScale = Vector3.Scale(loadedTransform.localScale, previousTransform.localScale);
+            // Figure out the scaling
+            AvailablePart availablePart = part.partInfo;
+
+            // Default scaling for parts that don't have a rescaleFactor
+            float rescaleFactor = 1.25f;
+
+            // Override default value if available in the config
+            if (availablePart.partConfig.HasValue("rescaleFactor"))
+                rescaleFactor = float.Parse(availablePart.partConfig.GetValue("rescaleFactor"));
+
+            // Apply the rescaleFactor
+            loadedTransform.localScale *= rescaleFactor;
         }
 
         // This function is depracated, use CopyComplete
