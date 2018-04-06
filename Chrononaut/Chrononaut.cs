@@ -24,12 +24,14 @@ namespace Chrononaut
     using UnityEngine;
     using UnityEngine.Rendering;
     using UnityEngine.UI;
+    using static AssemblyLoader;
     using static GameDatabase;
 
     [KSPAddon(KSPAddon.Startup.FlightAndEditor, false /*once*/)]
     public class Chrononaut : MonoBehaviour
     {
         bool configLoaded;
+        private DateTime lastLoadTime;
 
         [Persistent] public string keyReloadVessel = "f8";
 
@@ -50,6 +52,9 @@ namespace Chrononaut
             // Load the settings into this class
             ConfigNode.LoadObjectFromConfig(this, settings);
 
+            // Init the loader to reduce time later
+            Loader.Init();
+
             // Try to use the key reference. If it doesn't work, an exception 
             // will be thrown and configLoaded will not be set
             Input.GetKeyDown(keyReloadVessel);
@@ -58,6 +63,8 @@ namespace Chrononaut
 
         private void Awake()
         {
+            lastLoadTime = DateTime.Now;
+
             LoadConfig();
         }
 
@@ -134,97 +141,26 @@ namespace Chrononaut
             return modelFile;
         }
 
-        // Print the list of textures for debugging purposes
-        public void PrintTextures()
-        {
-            TextureInfo textureInfo;
-            GameDatabase gdb = GameDatabase.Instance;
-            Debug.Log("count: " + gdb.databaseTexture.Count);
-            for (int i = 0; i < gdb.databaseTexture.Count; i++)
-            {
-                textureInfo = gdb.databaseTexture[i];
-                Debug.Log("tex: " + textureInfo.name + ", " + textureInfo.file);
-            }
-        }
 
-        // Use reflection to get a method of a potentially hidden class
-        object RunMethod(string assemblyName, string className, string methodName, object[] parameters)
-        {
-            // Start by getting the assembly.
-            Assembly assembly = Assembly.LoadFile(assemblyName);
-
-            // Get the assembly from the already loaded list instead of reading it from file
-            /*
-             * Not possible since assembly-csharp is not in the LoadedAssemblyList
-            Assembly assembly = null;
-            foreach (AssemblyLoader.LoadedAssembly loadedAssembly in AssemblyLoader.loadedAssemblies)
-            {
-                Debug.Log("ass: " + loadedAssembly.name);
-                if (loadedAssembly.name == assemblyName || loadedAssembly.name == "KSP")
-                    assembly = loadedAssembly.assembly;
-            }
-            */
-
-            if (assembly == null)
-                return null;
-
-            Type type = assembly.GetType(className);
-            //Debug.LogError("type: " + type);
-
-            MethodInfo methodInfo = type.GetMethod(methodName);
-            //Debug.LogError("methodInfo: " + methodInfo);
-
-            // Run the method
-            return methodInfo.Invoke(type, parameters);
-        }
         /*
-        public void Load(UrlDir.UrlFile urlFile, FileInfo file)
-        {
-            Debug.Log("Loading: " + urlFile.name + ", " + urlFile.fullPath);
-            GameObject gameObject = ChronoReader.Read(urlFile);
-            if ((UnityEngine.Object)gameObject != (UnityEngine.Object)null)
-            {
-                obj = gameObject;
-                successful = true;
-            }
-            else
-            {
-                Debug.LogWarning("Model load error in '" + file.FullName + "'");
-                obj = null;
-                successful = false;
-            }
-            //yield break;
-        }
-        */
-        // Load the model file requested from file and return it as a GameObject.
-        private GameObject LoadModelFile(UrlDir.UrlFile modelFile)
-        {
-            GameObject loadedObject = null;
-
-            // Method 1: Access the internal PartReader.Read method by reflection to read it.
-            /*
-            loadedObject = (GameObject)RunMethod(
-                "KSP_x64_Data/Managed/Assembly-CSharp.dll",
-                "PartReader",
-                "Read",
-                new object[] { modelFile });
-            */
-
-            // Method 2: Alternative reference implementation of PartReader for being able to add debug messages
-            // loadedObject = ChronoReader.Read(urlFile);
-
-            // Method 3: Use the database loader instead of the part reader directly
-            DatabaseLoaderModel_MU databaseLoader = new DatabaseLoaderModel_MU();
-            StartCoroutine(databaseLoader.Load(modelFile, null));
-            loadedObject = databaseLoader.obj;
-
-            if (loadedObject == null)
-            {
-                Debug.LogError("Chrononaut:LoadModelFile(): Failed to read file: " + modelFile.name);
-                return null;
-            }
-            return loadedObject;
-        }
+                public void Load(UrlDir.UrlFile urlFile, FileInfo file)
+                {
+                    Debug.Log("Loading: " + urlFile.name + ", " + urlFile.fullPath);
+                    GameObject gameObject = ChronoReader.Read(urlFile);
+                    if ((UnityEngine.Object)gameObject != (UnityEngine.Object)null)
+                    {
+                        obj = gameObject;
+                        successful = true;
+                    }
+                    else
+                    {
+                        Debug.LogWarning("Model load error in '" + file.FullName + "'");
+                        obj = null;
+                        successful = false;
+                    }
+                    //yield break;
+                }
+                */
 
         // Called frequently in the flight scene and the VAB editor
         public void Update()
@@ -235,15 +171,21 @@ namespace Chrononaut
 
             // React to key presses from the user
             if (Input.GetKeyDown(keyReloadVessel))
-                // GameDatabase.Instance.loadObje
+            {
+                Debug.Log("*** Chrononaut_v0.3.0:UpdateVessel ***");
+
+                // GameDatabase.Instance.StartCoroutine("LoadObjects");
+
+                Loader.ReloadTextures(lastLoadTime);
+                lastLoadTime = DateTime.Now;
+
                 UpdateParts();
+            }
         }
 
         // Loop through all the parts to update them
         public void UpdateParts()
         {
-            Debug.Log("*** Chrononaut_v0.3.0:UpdateParts ***");
-
             // Retrieve the active vessel and its parts
             Vessel vessel = FlightGlobals.ActiveVessel;
             List<Part> parts = null;
@@ -260,33 +202,23 @@ namespace Chrononaut
 
                 // Get the model name including the relative path to GameData
                 UrlDir.UrlFile modelFile = GetModelFile(part);
-                // Debug.Log("  Model: " + modelFile.name);
 
                 // Load the object from file
-                GameObject loadedObject = LoadModelFile(modelFile);
+                GameObject loadedObject = Loader.LoadModelFile(modelFile);
 
                 if (!loadedObject)
                     continue;
 
-                Debug.Log("  LoadedObject: " + loadedObject.name);
+                // Debug.Log("  LoadedObject: " + loadedObject.name);
 
                 // Perform the actual update of the part
                 UpdatePart(part, loadedObject);
+                // UpdateTextures(part);
             }
         }
 
         private void UpdatePart(Part part, GameObject loadedObject)
         {
-            /*
-             * TESTS
-            // Reference test of how GetTexture works
-            Texture2D texture;
-            texture = GameDatabase.Instance.GetTexture(
-                "RocketEmporium/Parts/Coupling/fairing",
-                false);
-            Debug.Log("tex1: " + texture);
-            */
-
             Transform model = part.transform.GetChild(0);
 
             // Check that we really found the expected model transform
@@ -316,7 +248,7 @@ namespace Chrononaut
                         // Destroy all other objects in the model transform
                         // child.parent = null;
                         Destroy(child.gameObject);
-                        Debug.Log("Destroying object: " + child.gameObject.name);
+                        //Debug.Log("Destroying object: " + child.gameObject.name);
                         break;
                 }
             }
@@ -344,8 +276,8 @@ namespace Chrononaut
             loadedTransform.localScale *= rescaleFactor;
         }
 
-        // This function is depracated, use CopyComplete
-        public void CopyMeshes(GameObject loadedObject, Part part)
+        // This function is deprecated, use CopyComplete
+        public void CopyMeshes(Part part, GameObject loadedObject)
         {
             // Destroy the object directly so it doesn't stay visible in the scene.
             // It will still be accessible to read from during this function
@@ -375,32 +307,30 @@ namespace Chrononaut
                 meshFilterDest.transform.localScale = meshFilterSource.transform.localScale;
                 meshFilterDest.transform.localRotation = meshFilterSource.transform.localRotation;
                 meshFilterDest.transform.localPosition = meshFilterSource.transform.localPosition;
+            }
+        }
 
-                /*
-                 * TESTS
-                Renderer[] componentsInChildren = meshFilterDest.GetComponentsInChildren<Renderer>();
-                int k = 0;
-                for (int num = componentsInChildren.Length; k < num; k++)
-                {
-                    Renderer renderer = componentsInChildren[k];
-                    int l = 0;
-                    for (int num2 = renderer.sharedMaterials.Length; l < num2; l++)
-                        renderer.enabled = true;
-                }
-                */
+        // Loop through the textures in the part and make sure they are updated
+        public void UpdateTextures(Part part)
+        {
+            Renderer[] renderers = part.GetComponentsInChildren<Renderer>();
+            foreach (Renderer renderer in renderers)
+            {
+                Material material = renderer.material;
+                Texture2D texture = (Texture2D)material.mainTexture;
+                //Debug.Log("    Renderer: " + renderer.name + ", " + (texture ? texture.name : "null"));
 
-                /*
-                 * TESTS
-                // Testing how we get textures in an object
-                Texture[] textures = meshFilterDest.GetComponentsInChildren<Texture>();
-                int k = 0;
-                for (int num = textures.Length; k < num; k++)
-                {
-                    Texture texture = textures[k];
-                    int l = 0;
-                    Debug.Log("    Texture: " + texture.name);
-                }
-                */
+                if (!texture)
+                    continue;
+
+                // Kludge: there are some rendering effects that have a texture name which is not a full path.
+                // If the name doesn't contain a full path, we must disregard it, or GetTexture will fail.
+                if (texture.name.IndexOf("/") == -1)
+                    continue;
+
+                texture = GameDatabase.Instance.GetTexture(texture.name, false);
+                material.mainTexture = texture;
+                // Debug.Log("      texture: " + texture.name + " (" + texture.width + "*" + texture.height + ")");
             }
         }
     }
