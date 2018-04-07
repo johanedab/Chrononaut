@@ -42,17 +42,16 @@ namespace Chrononaut
             // Load the settings file
             ConfigNode settings = ConfigNode.Load(KSPUtil.ApplicationRootPath + "GameData/Chrononaut/Settings.cfg");
             if (settings == null)
+                Debug.LogError("Failed to open settings file");
+            else
             {
-                Debug.LogError("Chrononaut:LoadConfig(): Failed to open settings file");
-                return;
+                Debug.Log("Settings: " + settings);
+
+                // Load the settings into this class
+                ConfigNode.LoadObjectFromConfig(this, settings);
             }
 
-            Debug.Log("settings: " + settings);
-
-            // Load the settings into this class
-            ConfigNode.LoadObjectFromConfig(this, settings);
-
-            // Init the loader to reduce time later
+            // Init the loader to reduce time later on first activation
             Loader.Init();
 
             // Try to use the key reference. If it doesn't work, an exception 
