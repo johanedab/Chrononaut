@@ -37,7 +37,7 @@ namespace Chrononaut
 
         private void LoadConfig()
         {
-            Debug.Log("*** Chrononaut_v0.3.0:LoadConfig ***");
+            Debug.Log(string.Format("*** Chrononaut_v{0}:LoadConfig ***", Assembly.GetExecutingAssembly().GetName().Version));
 
             // Load the settings file
             ConfigNode settings = ConfigNode.Load(KSPUtil.ApplicationRootPath + "GameData/Chrononaut/Settings.cfg");
@@ -171,7 +171,7 @@ namespace Chrononaut
             // React to key presses from the user
             if (Input.GetKeyDown(keyReloadVessel))
             {
-                Debug.Log("*** Chrononaut_v0.3.0:UpdateVessel ***");
+                Debug.Log(string.Format("*** Chrononaut_v{0}:Update´***", Assembly.GetExecutingAssembly().GetName().Version));
 
                 // GameDatabase.Instance.StartCoroutine("LoadObjects");
 
@@ -212,7 +212,7 @@ namespace Chrononaut
 
                 // Perform the actual update of the part
                 UpdatePart(part, loadedObject);
-                // UpdateTextures(part);
+                //UpdateTextures(part);
             }
         }
 
